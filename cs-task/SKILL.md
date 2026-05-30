@@ -84,7 +84,7 @@ Task List 只负责“任务恢复和跨 workflow 进度账本”。
 3. 自由输入补充信息
 ```
 
-用户选择后，读取对应 task，输出下一步应该触发的 owner skill 和未完成步骤。
+用户选择后，读取对应 task，构造 handoff 并自动进入 owner skill；只有 owner skill 缺失、目标不明确或存在风险操作时，才停在结构化问题。
 
 ---
 
@@ -171,7 +171,7 @@ Task List 只负责“任务恢复和跨 workflow 进度账本”。
 
 ## 退出条件
 
-- recovery：已明确下一步 owner skill、task 路径、未完成步骤。
+- recovery：已明确并自动进入下一步 owner skill，或因真实歧义停在结构化问题；task 路径和未完成步骤已同步。
 - create：Task List 已创建并同步运行时任务视图。
 - update：Task List 文件先于运行时任务视图更新。
 - complete：Task List 状态已改为 `completed`。

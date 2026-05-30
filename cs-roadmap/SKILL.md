@@ -36,7 +36,7 @@ description: 把"大到塞不进单个 feature"的需求做成完整事前规划
 ## 适用场景
 
 - 用户描述"一眼看出做不完"的大需求（"加权限系统"、"做通知中心"、"接 SSO"）
-- `cs-brainstorm` 判为 case 3 移交过来（brainstorm 只做分诊，不做拆解）
+- `cs-brainstorm` 判为 case 3 自动交接过来（brainstorm 只做分诊，不做拆解）
 - 已有 roadmap 加新子 feature / 改依赖 / 调顺序 / 标废弃
 - feature-design 发现要做的事实际是多个 feature 集合，先退回拆
 
@@ -51,7 +51,7 @@ description: 把"大到塞不进单个 feature"的需求做成完整事前规划
 | "拆一下 X 需求"、"开一份 X 的 roadmap"、"我想要一个 X 系统" | `new` |
 | "往 {已有 roadmap} 加子 feature"、"重排顺序"、"标 drop" | `update` |
 
-判断不出问用户。
+判断不出时，用结构化问题让用户选。
 
 ---
 
@@ -132,6 +132,8 @@ review 前自跑一遍汇报处理：
 
 **不改 requirements / architecture**——roadmap 是规划层，那两层只描述现状。拆解过程发现 req / 架构过时，在主文档"观察项"记一句给用户，不顺手改。
 
+落盘完成后如果用户选择“通过并继续”，自动进入第一条 `minimal_loop: true` 的 roadmap item 对应的 `cs-feat-design`；如果用户选择“只保存 roadmap”，则停在当前阶段。
+
 ---
 
 ## 和 feature 流程的衔接
@@ -200,7 +202,7 @@ feature-design 发现接口契约不合理 / 漏了 / 描述不准 → **回 `cs
 | `cs-feat` 下游 | 每条子 feature 是未来一次 feature 流程的种子；起头时 design frontmatter 带 `roadmap` / `roadmap_item` |
 | `cs-feat-accept` 回写方 | acceptance 自动改 items.yaml 为 `done`，本技能只定义格式不负责回写 |
 | `cs-onboard` 创建者 | 建 `roadmap/` 空目录 |
-| `cs-brainstorm` 上游 | case 3 移交本技能，带"真问题 / 大致范围 / 可能子模块"一句话汇总。本技能不重复分诊直接拆 |
+| `cs-brainstorm` 上游 | case 3 自动交接本技能，带"真问题 / 大致范围 / 可能子模块"一句话汇总。本技能不重复分诊直接拆 |
 
 ---
 

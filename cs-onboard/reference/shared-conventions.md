@@ -169,6 +169,26 @@ planned  → dropped      （cs-roadmap update 模式，用户决定不做时改
 
 **最小闭环标记**：items.yaml 每份只有一条 `minimal_loop: true`，标记"做完后系统能端到端跑通最窄路径"。design 启动 `minimal_loop` 条目时优先级最高。
 
+## 2.6 自动编排与结构化询问协议
+
+CodeStable 入口和阶段技能默认自动编排：下一步可确定时直接继续，不要求用户复制粘贴 `cs-*` 名称；只有真实歧义、review 或风险操作才询问。
+
+**checkpoint 分级**：
+- `L0` 机械路由：自动继续。
+- `L1` 信息不足：用结构化问题让用户选。
+- `L2` 阶段 review：展示产物后让用户选择“通过继续 / 修改 / 暂停 / 自由输入”。
+- `L3` 高风险：删除、覆盖、提交、迁移、生产操作、关键数据改动必须显式确认。
+
+**handoff 约定**：进入目标 skill 前在上下文中保留 `from_skill` / `to_skill` / `user_goal` / `detected_workflow` / `current_stage` / `target_stage` / `evidence` / `decisions` / `open_questions` / `next_action`。`open_questions` 为空必须继续；非空必须转成结构化问题。
+
+**结构化问题**：
+- 选项用编号 `1..4`，推荐路径放 `1`。
+- 最后一项保留“自由输入补充信息”。
+- 自由输入仍有歧义时，重新给编号选项。
+- 不得用开放式长问题替代可枚举选择。
+
+**职责边界**：当前 skill 可以决定、交接并继续执行目标 skill，但不能绕过目标 skill 的流程规则，不能替目标 skill 产出文件，也不能跳过 L2/L3。
+
 ---
 
 ## 3. 阶段收尾推荐

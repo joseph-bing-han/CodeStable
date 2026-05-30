@@ -167,7 +167,7 @@ tags: [...]
 - 要动 `.codestable/architecture/` 既定的模块边界
 - 用户追加的要求让范围翻倍
 
-切回方式：触发 `cs-feat-design`。已写的代码在 design 里标"已部分实现"即可。
+切回方式：自动进入 `cs-feat-design`。已写的代码在 design 里标"已部分实现"即可。
 
 ---
 

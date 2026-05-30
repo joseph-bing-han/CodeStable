@@ -1,6 +1,6 @@
 ---
 name: cs-issue
-description: 修 bug 的子流程入口，把"发现问题"走到验证修复闭环，留下 report / analysis / fix-note 三份文件。触发：用户说"修 bug"、"有个问题"、"修复 XX"。只做路由，根据已有产物走 report / analyze / fix。简单问题走快速通道。
+description: 修 bug 的子流程入口，把"发现问题"自动编排到验证修复闭环，留下 report / analysis / fix-note 三份文件。触发：用户说"修 bug"、"有个问题"、"修复 XX"。根据已有产物自动进入 report / analyze / fix。简单问题走快速通道。
 ---
 
 # cs-issue
@@ -22,12 +22,12 @@ issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
 发现问题 → 清晰记录（report）→ 根因分析（analyze）→ 定点修复 + 验证（fix）
 ```
 
-本技能不写任何东西，只看当前 issue 走到哪步、决定触发哪个子技能。
+本技能不替阶段技能写 issue 文档或代码；它负责判断当前 issue 走到哪步，并自动进入对应子技能。只有路径选择、方案 review 或风险操作才停下来用结构化问题确认。
 
 ## Task 接入
 
 - 等级：`route-only`。本 skill 自己不写 issue 文档或代码，不直接创建 Task List。
-- 一旦路由到 `cs-issue-report` / `cs-issue-analyze` / `cs-issue-fix`，由对应下游 skill 负责按 `auto` 策略创建或复用 Task List。
+- 一旦自动编排到 `cs-issue-report` / `cs-issue-analyze` / `cs-issue-fix`，由对应下游 skill 负责按 `auto` 策略创建或复用 Task List。
 
 ---
 
@@ -58,7 +58,7 @@ issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
 | 2 根因分析 | `cs-issue-analyze` | AI 读代码分析，用户确认 | `{slug}-analysis.md` |
 | 3 修复验证 | `cs-issue-fix` | AI 按分析定点修复，用户验证 | 代码 + `{slug}-fix-note.md` + scoped-commit |
 
-阶段间有人工 checkpoint——让用户在每阶段结束有一次明确把关，防止 AI 一口气从问题跑到代码跑出来才发现走偏。
+阶段间有 L2 review checkpoint——让用户在每阶段结束有一次明确把关；用户选择“通过并继续”后，自动进入下一阶段，不要求重新输入 skill 名。
 
 ### 快速通道（问题简单、根因一眼确定）
 
@@ -80,7 +80,7 @@ issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
 
 进入本技能先 Glob `.codestable/issues/`，自己读已有文件才有数。
 
-| 当前状态 | 触发哪个子技能 |
+| 当前状态 | 自动进入哪个子技能 |
 |---|---|
 | 刚发现问题，没有任何文件 | `cs-issue-report`（那里判断走标准还是快速） |
 | `report.md` 已存在，没 `analysis.md` | `cs-issue-analyze` |
@@ -88,7 +88,7 @@ issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
 | 代码已改，还没修复验证记录 | `cs-issue-fix`（走验证） |
 | 不确定 | 自己读已有文件按上表对号 |
 
-用户描述的是**新功能需求而不是 bug** → 告诉用户走 `cs-feat`。
+用户描述的是**新功能需求而不是 bug** → 自动交接 `cs-feat`。
 
 ---
 
