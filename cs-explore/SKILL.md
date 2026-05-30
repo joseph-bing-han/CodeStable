@@ -11,6 +11,12 @@ description: 对仓库做定向代码探索并把"提问→读代码→得结论
 
 同一个问题第一次花两小时查代码，第二次应该五分钟内找到答案——前提是第一次做完留下证据化的记录。cs-explore 把"提问 → 读代码 → 得结论"沉淀成可检索的探索文档。
 
+## Task 接入
+
+- 等级：`ask`（次要变更）。本 skill 在首次写 `.codestable/compound/YYYY-MM-DD-explore-{slug}.md` 前，用当前 Agent 提供的结构化用户问答能力询问是否进入 Tasks。
+- 固定选项：`1. 进入 Tasks / 2. 跳过 Tasks / 3. 自由输入补充信息`。用户选 `1` 后创建或复用 Task List，并把 explore 文档写入索引。
+- 若用户选 `2`，仍可正常落 explore 证据，但不创建 Task List。
+
 ---
 
 ## 适用场景

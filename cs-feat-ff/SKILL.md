@@ -11,6 +11,12 @@ description: feature 流程的超轻量通道——不写 design / checklist 直
 
 用户让你做小功能时本来 AI 就会直接动手——这个技能**不改变这件事**。它只做一件事：动手前把项目里已沉淀的 CodeStable 知识指给你，按需搜一下，写出来的代码就比裸写多一层保护；动手后回写一份**最简的 `{slug}-ff-note.md`** 让这次工作可追溯、可被 cs-arch / cs-req backfill 看到、能纳入 scoped-commit 提交。
 
+## Task 接入
+
+- 等级：`auto`（重要变更）。本 skill 在首次修改代码或写 `{slug}-ff-note.md` 前，必须先创建或复用 Task List。
+- 动手前的知识检索不写任务；一旦进入实际代码改动、验证记录或 ff-note 落盘，每次阶段推进都先更新 Task List 的步骤状态和 CodeStable 文档索引。
+- fastforward 闭环完成且用户确认效果 OK 后，将 Task List 标记 `completed`；归档由 `cs-task` 执行并清理 active 残留。
+
 很轻：没有 design doc / checklist / 验收清单 / 动手前的用户确认。看完指引，该读代码读、该写代码写、写完回写一段话。
 
 ---

@@ -19,6 +19,12 @@ description: feature 流程阶段 1——为新功能起草 {slug}-design.md 作
 - **初始化模式**：用户说"开一个新需求 / 起个草稿 / 新建一个 feature"，但想自己先写半成品方案而不是口述。走下一节"初始化模式"，建好目录和空 `{slug}-intent.md` 就结束本轮，等用户填完再回来。
 - **从 roadmap 条目起头**：用户说"开始做 roadmap 里的 {子 feature slug}"或"推进 {roadmap} 的下一条"。slug 从 roadmap items.yaml 取，不另起；动笔前要读 roadmap 主文档和 items.yaml 了解上下文和依赖状态；落盘时 frontmatter 要带 `roadmap` / `roadmap_item` 两个字段，同时回写 items.yaml 把对应条目 `status` 改为 `in-progress`、`feature` 填为 feature 目录名。详见下文"从 roadmap 条目起头"。
 
+## Task 接入
+
+- 等级：`auto`（重要变更）。本 skill 在创建 feature 目录、写 `{slug}-intent.md` / `{slug}-design.md` / `{slug}-checklist.yaml`、或回写 roadmap 条目前，必须先创建或复用该 feature 的 Task List。
+- 如果同一 feature 已有 Task List，则复用并把 `owner_skill` 切到 `cs-feat-design`；每次 design 草稿落盘、review 结论更新、checklist 生成、roadmap 条目回写后，先同步 Task List 的步骤状态和 CodeStable 文档索引。
+- 设计阶段结束后不标记 `completed`；只把下一步 owner skill 和未完成步骤交给 `cs-feat-impl` 继续复用，直到 feature 验收闭环完成。
+
 ---
 
 ## 初始化模式：帮用户建目录和 intent 草稿

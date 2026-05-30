@@ -24,6 +24,11 @@ issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
 
 本技能不写任何东西，只看当前 issue 走到哪步、决定触发哪个子技能。
 
+## Task 接入
+
+- 等级：`route-only`。本 skill 自己不写 issue 文档或代码，不直接创建 Task List。
+- 一旦路由到 `cs-issue-report` / `cs-issue-analyze` / `cs-issue-fix`，由对应下游 skill 负责按 `auto` 策略创建或复用 Task List。
+
 ---
 
 ## 文件放哪儿

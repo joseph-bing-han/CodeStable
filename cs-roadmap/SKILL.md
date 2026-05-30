@@ -25,6 +25,12 @@ description: 把"大到塞不进单个 feature"的需求做成完整事前规划
 
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md`。主文档和 items 完整模板看同目录 `reference.md`。
 
+## Task 接入
+
+- 等级：`auto`（重要变更）。本 skill 在首次创建或更新 `.codestable/roadmap/{slug}/` 主文档、`items.yaml` 或 `drafts/` 前，必须先创建或复用 Task List。
+- `new` / `update` 模式下，每次 roadmap 主文档落盘、`items.yaml` 变更、依赖重排或观察项补记后，先更新 Task List 的步骤状态和 CodeStable 文档索引，再继续原流程。
+- roadmap 用户 review 通过且文件全部落盘后，将 Task List 标记 `completed`；归档由 `cs-task` 执行并清理 active 残留。
+
 ---
 
 ## 适用场景

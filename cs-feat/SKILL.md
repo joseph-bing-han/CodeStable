@@ -19,6 +19,11 @@ brainstorm 是讨论层独立入口，会分诊：case 1（清楚 → 直接 des
 
 本技能不写代码不写文档，只做一件事：看当前 feature 走到哪步，告诉用户该触发哪个子技能。
 
+## Task 接入
+
+- 等级：`route-only`。本 skill 只判断 feature 当前阶段，不直接创建 Task List。
+- 一旦路由到 `cs-feat-design` / `cs-feat-impl` / `cs-feat-accept` / `cs-feat-ff`，由对应下游 skill 负责按 `auto` 策略创建或复用 Task List。
+
 ---
 
 ## 文件放哪儿

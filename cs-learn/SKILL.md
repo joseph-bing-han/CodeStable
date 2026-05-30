@@ -16,6 +16,12 @@ description: 把踩过的坑或好做法沉淀成可检索的 learning 文档，
 - **坑点轨道**（pitfall）：记录问题 / 根因 / 解法，防止下次再掉进同一个坑
 - **知识轨道**（knowledge）：记录最佳实践 / 工作流改进 / 可复用模式
 
+## Task 接入
+
+- 等级：`ask`（次要变更）。本 skill 在首次写 `.codestable/compound/YYYY-MM-DD-learning-{slug}.md` 前，用当前 Agent 提供的结构化用户问答能力询问是否进入 Tasks。
+- 固定选项：`1. 进入 Tasks / 2. 跳过 Tasks / 3. 自由输入补充信息`。用户选 `1` 后创建或复用 Task List，并把 learning 文档写入索引。
+- 若用户选 `2`，仍可正常落 learning，但不创建 Task List。
+
 两者都写入 `.codestable/compound/`（共享目录见 `shared-conventions.md` 第 1 节"归档类文档"）。本技能产出 frontmatter 带 `doc_type: learning`，命名 `YYYY-MM-DD-learning-{slug}.md`。
 
 ---

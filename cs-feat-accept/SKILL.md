@@ -18,6 +18,12 @@ description: feature 流程阶段 3——验收闭环：对照 design 核实现 
 
 漏掉任何一件的代价：架构 doc 过期下个 feature 读到错信息；req 和实际能力脱节；roadmap 规划层和实际进度脱节，下次推进会重复跑流程。
 
+## Task 接入
+
+- 等级：`auto`（重要变更）。本 skill 必须复用当前 feature 的 Task List，并在首次写 `{slug}-acceptance.md`、回写 architecture / requirement / roadmap 文档或修正验收偏差前保持同步。
+- 每完成一节验收核对、每次落盘 acceptance / architecture / req / roadmap 文件、或 `checks` 状态变化后，先更新 Task List 的步骤状态和 CodeStable 文档索引，再继续流程。
+- 只有当验收报告完成、关联回写完成、用户终审通过后，才将该 feature Task List 标记 `completed`；归档由 `cs-task` 执行并清理 active 残留。
+
 **没产出报告 = 工作流未完成**。后人查"上次这个功能验收时确认了哪些行为"，没报告就只能翻 git diff 重新推断。
 
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md` 第 0 节。

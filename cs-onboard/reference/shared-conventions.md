@@ -24,6 +24,11 @@ onboard 完成后骨架（`cs-onboard` 负责搭建）：
 │       ├── {slug}-roadmap.md   主文档：背景 / 范围 / 模块拆分 / 接口契约 / 子 feature 清单 / 排期
 │       ├── {slug}-items.yaml   机器可读子 feature 清单，acceptance 回写状态
 │       └── drafts/             可选
+├── tasks/                 任务运行账本（cs-task 产出 / 维护）
+│   ├── active/            当前任务、中断恢复、已完成待归档任务
+│   │   └── {task}.md
+│   └── archived/          历史任务
+│       └── YYYY-MM-DD-{task}.md
 ├── features/              feature spec 聚合根
 │   └── YYYY-MM-DD-{slug}/  每个 feature 一个目录
 │       ├── {slug}-brainstorm.md  （可选，case 2 时产出）
@@ -56,6 +61,7 @@ onboard 完成后骨架（`cs-onboard` 负责搭建）：
 
 - 需求文档：`requirements/{slug}.md`（能力愿景，不带日期前缀，扁平不分组）；中心索引 `requirements/VISION.md`
 - roadmap：`roadmap/{slug}/`（不带日期前缀，平铺不嵌套）
+- task list：`tasks/active/{task}.md` 当前任务不带日期；`tasks/archived/YYYY-MM-DD-{task}.md` 历史任务带归档日期
 - feature / issue / refactor 目录：带日期前缀 `YYYY-MM-DD-{slug}`
 - 沉淀类：`compound/YYYY-MM-DD-{doc_type}-{slug}.md`，日期用**归档当天**
 - 架构 doc：`architecture/{type}-{slug}.md`（长效，不带日期前缀）；总入口固定 `ARCHITECTURE.md`
@@ -76,6 +82,10 @@ onboard 完成后骨架（`cs-onboard` 负责搭建）：
 ### 改目录结构
 
 改 `cs-onboard/reference/shared-conventions.md` 模板，新项目 onboard 时带上新版本；已有项目手动同步 `.codestable/reference/shared-conventions.md`。
+
+### task list 共享边界
+
+`.codestable/tasks/` 是跨 workflow 的运行账本，用于当前任务、中断恢复和历史归档；详细 schema 和状态机看 `cs-task/reference.md`。Task List 是 source of truth，Agent 原生 Tasks/Todo 只是运行时镜像。它不替代 feature/refactor checklist，也不替代 roadmap items。
 
 ---
 

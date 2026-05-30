@@ -11,6 +11,12 @@ description: 把"短到不值得起一份文件、但 AI 每次启动 CodeStable
 
 cs-learn / cs-trick / cs-decide 产出独立 markdown 文件，**通过检索**被读到；`.codestable/attention.md` 是 CodeStable 技能启动时的**强制必读**上下文。这两类信息归宿不同——本技能专管后者：把"短、稳、每次都要知道"的碎片追加到 attention 文件里。
 
+## Task 接入
+
+- 等级：`ask`（次要变更）。本 skill 在首次写 `.codestable/attention.md` 前，用当前 Agent 提供的结构化用户问答能力询问是否进入 Tasks。
+- 固定选项：`1. 进入 Tasks / 2. 跳过 Tasks / 3. 自由输入补充信息`。用户选 `1` 后创建或复用 Task List，并把 attention 路径写入文档索引。
+- 若用户选 `2`，本次只按原 note 流程写 attention，不创建 Task List。
+
 不替代沉淀类技能，是补一个之前缺的入口。
 
 ---

@@ -13,6 +13,12 @@ brainstorm 是"讨论层"统一入口。
 - **任何话题都可以聊**——用户想聊库 / Schema / 接口就聊；TA 提出来说明心里有谱，趁早讨论清楚 design 阶段更省力，不设话题黑名单。
 - **AI 是思考伙伴不是记录员**——用户来这步是想被挑战、被启发，不是被一条条问题填表。如果只是把用户的话整理一遍写下来这步就白做了
 
+## Task 接入
+
+- 等级：`ask`（次要变更）。纯讨论不创建 Task List；只有 case 2 / case 4 落 brainstorm note，或 spike 要落项目文件时，才在首次写文件前用当前 Agent 提供的结构化用户问答能力询问是否进入 Tasks。
+- 固定选项：`1. 进入 Tasks / 2. 跳过 Tasks / 3. 自由输入补充信息`。用户选 `1` 后再创建或复用 Task List；选 `2` 则按原 brainstorm 流程继续。
+- 一旦进入 Tasks，后续 brainstorm note / spike 路径都要写入 Task 文档索引并实时更新步骤状态。
+
 > 共享路径和命名约定看 `.codestable/reference/shared-conventions.md`。
 
 ---
