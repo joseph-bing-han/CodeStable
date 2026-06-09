@@ -63,6 +63,8 @@ CodeStable 把开发活动建模成 **7 个实体 + 3 个流程**，所有产物
 
 **横切**：流程跑完发现"值得记下来" → `cs-learn` / `cs-trick` / `cs-decide` / `cs-explore` 沉淀到 `compound/`。
 
+**最终质量门禁**：feature / issue / refactor / fastforward 完成后、scoped-commit / PR / merge 前 → `cs-code-review` 做独立代码评审。
+
 **核心理念**：编排的是软件本身的生命周期（需求、架构、特性、bug、决策），不是 Agent。人在环——程序员对整体把控负责，AI 是高效执行体。
 
 > 项目已 onboard 的话更详细总览看 `.codestable/reference/system-overview.md`。
@@ -82,6 +84,7 @@ CodeStable 把开发活动建模成 **7 个实体 + 3 个流程**，所有产物
 | 代码优化 / 重构 / 重写（行为不变） | `cs-refactor` / `cs-refactor-ff` |
 | 摸代码 / "X 是怎么实现的" / 提问调研 | `cs-explore` |
 | 审查系统 / 扫描 bug / 审计代码 / "有哪些问题" / "哪里可以优化" | `cs-audit`（主动扫描发现，只列清单不定修） |
+| code review / 代码评审 / 代码审查 / 合并前审一下 / 准备 PR 或 merge | `cs-code-review`（审当前 diff，对照 CodeStable 产物做最终质量门禁） |
 | 补 / 更新需求文档 | `cs-req` |
 | 补 / 更新 / 检查架构文档 / "刷新架构 doc" / "做架构体检" | `cs-arch` |
 | 大需求拆解 / "我想要一个 X 系统" / 排期规划 / 模块拆分 + 接口契约 | `cs-roadmap` |

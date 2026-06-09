@@ -50,7 +50,7 @@ related_docs:
 | `task` | 小写英文连字符，必须和 active 文件名一致 |
 | `goal` | 人类可读任务目标 |
 | `status` | `active` / `blocked` / `completed` / `cancelled` / `archived` |
-| `workflow` | `feature` / `issue` / `refactor` / `roadmap` / `req` / `arch` / `audit` / `compound` / `guide` / `libdoc` / `onboard` / `task` |
+| `workflow` | `feature` / `issue` / `refactor` / `code-review` / `roadmap` / `req` / `arch` / `audit` / `compound` / `guide` / `libdoc` / `onboard` / `task` |
 | `owner_skill` | 当前负责推进的 skill，如 `cs-feat-impl` |
 | `created` | 创建日期 |
 | `updated` | 最近更新日期 |

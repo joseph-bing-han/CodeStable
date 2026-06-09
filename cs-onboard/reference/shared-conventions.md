@@ -35,22 +35,25 @@ onboard 完成后骨架（`cs-onboard` 负责搭建）：
 │       ├── {slug}-design.md      （标准流程）
 │       ├── {slug}-checklist.yaml （标准流程）
 │       ├── {slug}-acceptance.md  （标准流程）
-│       └── {slug}-ff-note.md     （fastforward 通道唯一产物，与上面四份互斥）
+│       ├── {slug}-code-review.md （标准 / fastforward 的最终质量门禁）
+│       └── {slug}-ff-note.md     （fastforward 通道回顾产物，与标准 design/checklist/acceptance 互斥）
 ├── issues/                issue spec 聚合根
 │   └── YYYY-MM-DD-{slug}/
 │       ├── {slug}-report.md
 │       ├── {slug}-analysis.md   （根因不显然才有）
-│       └── {slug}-fix-note.md
+│       ├── {slug}-fix-note.md
+│       └── {slug}-code-review.md
 ├── refactors/             refactor spec 聚合根
 │   └── YYYY-MM-DD-{slug}/
 │       ├── {slug}-scan.md
 │       ├── {slug}-refactor-design.md
 │       ├── {slug}-checklist.yaml
-│       └── {slug}-apply-notes.md
+│       ├── {slug}-apply-notes.md
+│       └── {slug}-code-review.md
 ├── compound/              沉淀类文档统一目录
 │   └── YYYY-MM-DD-{doc_type}-{slug}.md
 │                          doc_type ∈ {learning, trick, decision, explore}
-├── brainstorm/            brainstorm 阶段 spike 实验代码区（cs-brainstorm 临时产出）
+├── brainstorms/           brainstorm 阶段 spike 实验代码区（cs-brainstorm 临时产出）
 │   └── {slug}/            一次 spike 一个子目录，文件名随意
 │                          验完不强制清理，结论回写到对应 brainstorm note
 ├── tools/                 跨工作流共享脚本（onboard 从技能包释放）
@@ -95,6 +98,8 @@ onboard 完成后骨架（`cs-onboard` 负责搭建）：
 
 **issue spec**：report / analysis / fix-note 共用 `doc_type` / `issue` / `status` / `tags`。`severity` / `root_cause_type` / `path` 由对应阶段按需补。
 
+**code review spec**：`{slug}-code-review.md` 放在关联 feature / issue / refactor 目录，`doc_type: code-review`。`scope_type` 标明 `feature` / `issue` / `refactor` / `ad-hoc`，`status` 只用 `changes-required` / `approved-with-notes` / `approved`。Critical / Important 未清零时，上游流程不得进入 scoped-commit / PR / merge。
+
 **归档类（compound）**：
 
 - learning / trick / decision / explore 四类**统一写入 `.codestable/compound/`**
@@ -114,7 +119,7 @@ onboard 完成后骨架（`cs-onboard` 负责搭建）：
 
 - 是 feature 工作流的唯一执行清单
 - 由 `cs-feat-design` 在 design 确认通过后一次生成 `steps` + `checks`
-- `cs-feat-ff` **不生成** checklist（也不写 design / acceptance），是跳过 spec 流程直接写代码的超轻量通道；唯一留下的痕迹是动手后回写的 `{slug}-ff-note.md`（轻量回顾，参与 scoped-commit、可被 cs-arch / cs-req backfill 检索到）
+- `cs-feat-ff` **不生成** checklist（也不写 design / acceptance），是跳过 spec 流程直接写代码的超轻量通道；动手后回写 `{slug}-ff-note.md`（轻量回顾，可被 cs-arch / cs-req backfill 检索到），commit 前再由 `cs-code-review` 产出 `{slug}-code-review.md`
 
 `steps` 的粒度是 **编排-计算分离维度的切片策略**——按"先编排骨架、后计算节点、最后持久化与测试"写（最简 Workflow 先行 → 逐个节点填充），**不下沉到 file:line / 函数级**。具体改哪个文件由 implement 阶段决定。
 
@@ -195,23 +200,31 @@ CodeStable 入口和阶段技能默认自动编排：下一步可确定时直接
 
 **feature-acceptance** 收尾按顺序判断：
 
-1. `cs-learn`：沉淀经验
-2. `cs-decide`：长期约束 / 选型
-3. `cs-guide`：开发者 / 用户指南
-4. `cs-libdoc`：公开 API 参考
-5. `scoped-commit`
+1. `cs-code-review`：最终质量门禁
+2. `cs-learn`：沉淀经验
+3. `cs-decide`：长期约束 / 选型
+4. `cs-guide`：开发者 / 用户指南
+5. `cs-libdoc`：公开 API 参考
+6. `scoped-commit`
 
 **issue-fix** 收尾按顺序判断：
 
-1. `cs-learn`：坑点
-2. `cs-decide`：暴露的长期约束
-3. `scoped-commit`
+1. `cs-code-review`：最终质量门禁
+2. `cs-learn`：坑点
+3. `cs-decide`：暴露的长期约束
+4. `scoped-commit`
 
 **feature-ff** 收尾按顺序判断（比标准 acceptance 短，没有 architecture / req 回写动作）：
 
-1. `cs-learn`：动手过程暴露的坑
-2. `cs-decide`：动手过程拍板的长期约束
-3. `scoped-commit`
+1. `cs-code-review`：最终质量门禁
+2. `cs-learn`：动手过程暴露的坑
+3. `cs-decide`：动手过程拍板的长期约束
+4. `scoped-commit`
+
+**refactor / refactor-ff** 收尾按顺序判断：
+
+1. `cs-code-review`：最终质量门禁
+2. `scoped-commit`
 
 **统一规则**：一律一句话提示；用户说"不用"立即跳过；不强制；上游主动提示，下游承接执行。
 
@@ -219,12 +232,17 @@ CodeStable 入口和阶段技能默认自动编排：下一步可确定时直接
 
 ## 4. 收尾提交（scoped-commit）
 
-acceptance / issue-fix 走完后把本次产物提交为一个 commit：
+feature-ff / acceptance / issue-fix / refactor-ff / refactor apply 走完且 `cs-code-review` 通过后，把本次产物提交为一个 commit：
 
 - **范围**：本次工作改到的代码 + 相关 spec 文档 + 本次实际更新过的架构 doc + 本次实际更新过的 roadmap items.yaml / 主文档
 - **不该进**：和本次工作无关的顺手修改；属于"下次另起 feature / issue"的扩大范围
 - **提交前确认**：用户没明确同意不要 `git commit`
 - **commit message**：一句话说清"做了什么"，不贴 spec 目录路径
+
+补充：
+- `feature-ff`：相关 spec 文档 = `{slug}-ff-note.md` + `{slug}-code-review.md`
+- `refactor-ff`：相关 spec 文档 = `{slug}-code-review.md` + 可选 `{slug}-refactor-note.md`
+- 一旦上游阶段把 `owner_skill` 切到 `cs-code-review`，本地 `scoped-commit` 的最终确认与执行由 `cs-code-review` 统一负责；上游 skill 不再重复发起提交询问。PR / merge 只表示 review 已满足前置条件，不属于 CodeStable 内部自动执行范围。
 
 子技能只描述本阶段特有提交范围，通用规则看这里。
 

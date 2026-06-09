@@ -117,6 +117,7 @@ index.md 末尾给优先级建议：
 |---|---|---|
 | `cs-issue` | 用户报已知 bug | audit 发现 bug 后建议开 `cs-issue` |
 | `cs-refactor` | 用户指已知优化点 | audit 发现可优化点后建议开 `cs-refactor` |
+| `cs-code-review` | 当前 diff / PR 合并前质量门禁 | audit 不审当前变更，code review 不主动扫无关范围 |
 | `cs-explore` | 围绕一个问题查代码 | audit 是批量扫多个维度，不等同于 explore |
 | `cs-arch` | 维护架构文档 | cs-arch 维护文档，cs-audit 检查代码是否偏离文档 |
 | `cs-security-review` | 安全审查 | audit 的安全维度是轻量扫描，深度安全审查走专项 |

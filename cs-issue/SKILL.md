@@ -1,6 +1,6 @@
 ---
 name: cs-issue
-description: 修 bug 的子流程入口，把"发现问题"自动编排到验证修复闭环，留下 report / analysis / fix-note 三份文件。触发：用户说"修 bug"、"有个问题"、"修复 XX"。根据已有产物自动进入 report / analyze / fix。简单问题走快速通道。
+description: 修 bug 的子流程入口，把"发现问题"自动编排到修复验证与最终 code review，留下 report / analysis / fix-note / code-review 产物。触发：用户说"修 bug"、"有个问题"、"修复 XX"。根据已有产物自动进入 report / analyze / fix / code-review。简单问题走快速通道。
 ---
 
 # cs-issue
@@ -19,7 +19,7 @@ description: 修 bug 的子流程入口，把"发现问题"自动编排到验证
 issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
 
 ```
-发现问题 → 清晰记录（report）→ 根因分析（analyze）→ 定点修复 + 验证（fix）
+发现问题 → 清晰记录（report）→ 根因分析（analyze）→ 定点修复 + 验证（fix）→ code review
 ```
 
 本技能不替阶段技能写 issue 文档或代码；它负责判断当前 issue 走到哪步，并自动进入对应子技能。只有路径选择、方案 review 或风险操作才停下来用结构化问题确认。
@@ -37,7 +37,8 @@ issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
 .codestable/issues/{YYYY-MM-DD}-{slug}/
 ├── {slug}-report.md           ← 阶段 1 问题报告
 ├── {slug}-analysis.md         ← 阶段 2 根因分析
-└── {slug}-fix-note.md         ← 阶段 3 修复记录（必出产物）
+├── {slug}-fix-note.md         ← 阶段 3 修复记录（必出产物）
+└── {slug}-code-review.md      ← 阶段 4 最终代码评审
 ```
 
 日期取**发现 / 提报问题当天**定了不动。slug 能一眼看出是什么问题（`auth-token-leak`、`null-pointer-on-empty-list`）。
@@ -56,7 +57,8 @@ issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
 |---|---|---|---|
 | 1 问题报告 | `cs-issue-report` | 用户描述，AI 引导 | `{slug}-report.md` |
 | 2 根因分析 | `cs-issue-analyze` | AI 读代码分析，用户确认 | `{slug}-analysis.md` |
-| 3 修复验证 | `cs-issue-fix` | AI 按分析定点修复，用户验证 | 代码 + `{slug}-fix-note.md` + scoped-commit |
+| 3 修复验证 | `cs-issue-fix` | AI 按分析定点修复，用户验证 | 代码 + `{slug}-fix-note.md` |
+| 4 最终质量门禁 | `cs-code-review` | 独立 reviewer 审当前 diff | `{slug}-code-review.md` |
 
 阶段间有 L2 review checkpoint——让用户在每阶段结束有一次明确把关；用户选择“通过并继续”后，自动进入下一阶段，不要求重新输入 skill 名。
 
@@ -86,6 +88,7 @@ issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
 | `report.md` 已存在，没 `analysis.md` | `cs-issue-analyze` |
 | `analysis.md` 已存在，代码还没改 | `cs-issue-fix` |
 | 代码已改，还没修复验证记录 | `cs-issue-fix`（走验证） |
+| fix-note 已完成、准备 commit / PR / merge | `cs-code-review` |
 | 不确定 | 自己读已有文件按上表对号 |
 
 用户描述的是**新功能需求而不是 bug** → 自动交接 `cs-feat`。
