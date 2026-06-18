@@ -1,6 +1,6 @@
 ---
 name: cs-feat-review
-description: feature 流程阶段 2.5——实现完成后的本地代码审查 gate。对照 design / checklist / 实现汇报和当前 git diff 做只读 code review，产出 {slug}-review.md；有 blocking findings 时回到 cs-feat-impl 的 review-fix，不进入验收。触发：用户说"做代码审查"、"review 这个 feature"、"实现完了先 code review"、"跑 cs-feat-review"。
+description: feature 流程阶段 2.5——实现完成后的本地代码审查 gate。对照 design / checklist / 实现汇报和当前 git diff 做只读 code review，产出 {slug}-review.md；有 blocking findings 时回到 cs-feat-impl 的 review-fix，通过后进入 cs-feat-qa，不直接验收。触发：用户说"做代码审查"、"review 这个 feature"、"实现完了先 code review"、"跑 cs-feat-review"。
 ---
 
 # cs-feat-review
@@ -9,7 +9,7 @@ description: feature 流程阶段 2.5——实现完成后的本地代码审查 
 
 开始任何判断或动作前，先读取 `.codestable/attention.md`；缺失则视为骨架不完整，提示先补齐或运行 `cs-onboard`，不要回退到外部 AI 入口文件。
 
-本阶段是实现完成后、验收前的独立代码审查 gate。它只读代码和产物，只写 `{slug}-review.md`，不直接修代码、不更新 checklist、不改 design、不替代 acceptance。
+本阶段是实现完成后、QA 前的独立代码审查 gate。它只读代码和产物，只写 `{slug}-review.md`，不直接修代码、不更新 checklist、不改 design、不替代 QA 或 acceptance。
 
 审查目标不是追求完美代码，而是确认本次改动没有降低系统代码健康，并且确实朝 design 的目标前进。能自动格式化或 lint 的问题不要手工阻塞；会影响正确性、维护性、安全、性能、可测试性、需求满足或后续验收可信度的问题必须指出。
 
@@ -40,7 +40,7 @@ description: feature 流程阶段 2.5——实现完成后的本地代码审查 
 2. `{slug}-checklist.yaml` 存在，`steps` 全部 `done`，`checks` 仍处于验收前状态（通常是 `pending`）。
 3. 当前 diff 能看到本 feature 的实现改动；如果完全没有代码或产物改动，退回 `cs-feat-impl`。
 4. 如果已有 `{slug}-review.md`：
-   - `status: passed` 且 diff 未变化：提示可进入 `cs-feat-accept`。
+   - `status: passed` 且 diff 未变化：提示可进入 `cs-feat-qa`。
    - `status: changes-requested` / `blocked`：读取旧 findings，确认是否处于 review-fix 后的复审。
    - diff 已变化：重新 review，并在报告里记录这是第几轮。
 
@@ -98,7 +98,7 @@ description: feature 流程阶段 2.5——实现完成后的本地代码审查 
 - `suggestion`：替代实现思路，不要求本次采用。
 - `learning`：知识性说明，不要求动作。
 - `praise`：记录值得保留的好做法；少量即可。
-- `residual-risk`：review 无法完全消除的不确定性，需要 acceptance / QA 重点复核。
+- `residual-risk`：review 无法完全消除的不确定性，需要 QA / acceptance 重点复核。
 
 不要把个人偏好升级成 blocking。blocking 必须能用仓库事实、design 契约、可靠工程原则或可复现实例支撑。
 
@@ -141,7 +141,7 @@ round: 1
 
 - [ ] REV-001 `{file:line}` {问题}
   - Evidence: {仓库事实 / design 契约 / 失败路径}
-  - Impact: {为什么阻塞 acceptance}
+  - Impact: {为什么阻塞 QA / acceptance}
   - Expected fix scope: {只描述问题边界，不替实现写方案}
 
 ### important
@@ -168,18 +168,18 @@ round: 1
 
 ## 4. Test And QA Focus
 
-- acceptance 必须重点复核：{场景 / 命令 / 手工验证}
+- QA 必须重点复核：{场景 / 命令 / 手工验证}
 - 建议新增或加强的测试：{unit / integration / e2e / function / none}
 - 不能靠 review 完全确认的点：{列表}
 
 ## 5. Residual Risk
 
-- {风险 + acceptance 如何处理；没有写 none}
+- {风险 + QA / acceptance 如何处理；没有写 none}
 
 ## 6. Verdict
 
 - Status: passed|changes-requested|blocked
-- Next: `cs-feat-accept` | `cs-feat-impl` review-fix | 补齐输入后重跑 `cs-feat-review`
+- Next: `cs-feat-qa` | `cs-feat-impl` review-fix | 补齐输入后重跑 `cs-feat-review`
 ```
 
 没有某类 finding 时写 `none`，不要删除章节；下一轮复审要能对比。
@@ -193,16 +193,16 @@ round: 1
 1. 报告 `status: changes-requested`。
 2. 告诉用户下一步触发 `cs-feat-impl` 的 review-fix 模式。
 3. review-fix 只修 blocking findings；important 是否修由用户或实现者判断，但不能顺手扩大范围。
-4. review-fix 完成后必须重跑 `cs-feat-review`，不能直接进入 `cs-feat-accept`。
+4. review-fix 完成后必须重跑 `cs-feat-review`，不能直接进入 `cs-feat-qa` 或 `cs-feat-accept`。
 
 如果只有 `important`：
 
-- 默认建议先修；如果用户明确接受延后，报告里把它移入 residual risk，并允许进入 `cs-feat-accept`。
+- 默认建议先修；如果用户明确接受延后，报告里把它移入 residual risk，并允许进入 `cs-feat-qa`。
 
 如果没有 blocking，且 important 已处理或被明确接受：
 
 - 报告 `status: passed`。
-- 告诉用户下一步是 `cs-feat-accept`。
+- 告诉用户下一步是 `cs-feat-qa`。
 
 ---
 
@@ -213,8 +213,8 @@ round: 1
 - [ ] 已做整体审查和行级审查。
 - [ ] 已明确区分 blocking / important / nit / suggestion / learning / praise / residual-risk。
 - [ ] 已写 `.codestable/features/{feature}/{slug}-review.md`。
-- [ ] 有 blocking 时没有进入 acceptance，而是指向 `cs-feat-impl` review-fix。
-- [ ] 无 blocking 时明确告诉用户下一步 `cs-feat-accept`。
+- [ ] 有 blocking 时没有进入 QA / acceptance，而是指向 `cs-feat-impl` review-fix。
+- [ ] 无 blocking 时明确告诉用户下一步 `cs-feat-qa`。
 
 ---
 
