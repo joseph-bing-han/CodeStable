@@ -235,6 +235,7 @@ Commands to re-run: <去重命令列表>
 8. 统计 `re-verified` 和 `trust-prior-verify`；截图 / 手工项不能重跑时记为 trust-prior。
 9. 确认 architecture / requirement / roadmap 回写存在。
 10. 确认知识候选已处理、明确延后或列给用户。
+11. 做 learning reflection：从整个 goal 的失败恢复、最终审计补强、设计/实现反复、跨 feature 约束中筛选可复用经验。
 
 打印：
 
@@ -257,6 +258,26 @@ Coverage: <re-verified> re-verified / <trust-prior> trust-prior
 4. 三轮仍失败则打印 `CS_ROADMAP_GOAL_HANDOFF`，把 state 改为 `blocked`，停止。
 
 如果无缺口：
+
+先打印 learning reflection，不直接写知识库：
+
+```text
+CS_ROADMAP_GOAL_LEARNING_REVIEW
+Pitfall candidates:
+- <候选|none>
+Knowledge candidates:
+- <候选|none>
+Not worth archiving:
+- <一次性上下文|none>
+Recommended next step: <run cs-learn after user confirmation|none>
+```
+
+筛选规则：
+
+- pitfall：失败恢复、误判、测试假设、环境/工具坑，后续任务可能重复踩。
+- knowledge：更好的默认做法、工作流改进、可复用设计/验证模式。
+- not worth archiving：只属于本次业务、不会复用、已被 architecture / requirement / roadmap 回写覆盖的事实。
+- 有候选时只建议用户确认后运行 `cs-learn`；不要自动创建或修改 `.codestable/compound/`。
 
 ```text
 CS_ROADMAP_GOAL_AUDIT_COMPLETE
