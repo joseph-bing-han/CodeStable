@@ -16,6 +16,18 @@
 
 开始执行前确认所有 feature design 的 frontmatter 都是 `status: approved`。发现 draft design 时停止，要求回到 design review 确认阶段；不要把未批准设计推进到实现。
 
+## Goal 模式 gate 接管
+
+本协议只在用户已经确认 roadmap 和全部 feature design 后运行。用户粘贴 `/goal` 代表授权 goal 会话按本协议连续执行后续 impl / review / QA / accept。
+
+普通 `cs-feat-impl` / `cs-feat-review` / `cs-feat-qa` / `cs-feat-accept` 中的"汇报后停等用户 review"、"用户终审确认"等阶段 checkpoint，在 goal 模式下改为写入报告和审计记录，不逐 feature 停下等用户。以下情况仍必须停止并打印 `CS_ROADMAP_GOAL_HANDOFF`：
+
+- 需要改变已批准 design、roadmap item、接口契约或 feature 范围
+- 独立 reviewer 已启动但 pending / failed / blocked，且没有用户明确降级
+- 同一失败项按本文失败恢复三轮仍不通过
+- 工作区归因不清、外部凭证 / 环境缺失导致核心行为无法判断
+- 用户主动要求暂停、改方向或终止
+
 ---
 
 ## 启动标记
@@ -33,18 +45,19 @@ Protocol: {roadmap-path}/goal-protocol.md
 
 然后做预检：
 
-1. 汇总所有 goal-features 中的必跑命令。
-2. 成本可接受时先跑一遍。
-3. 记录每条命令 green / red。
-4. red 时判断：既有问题 / 阻塞问题 / 无法归因。
-5. 如果 red 的原因是测试工具 / runner 缺失，优先把工具声明为项目测试依赖或使用项目已有 runner，再重跑原命令；不能创建同名本地 shim、假命令或伪测试结果来让命令变绿。
-6. 阻塞或无法归因时不要盲目继续；如果 roadmap 明确有 safety net feature，则先执行对应 feature，否则交还用户。
+1. 校验 git 基线：如果当前在 git 仓库内，`baseline_ref` 必须是 `git rev-parse HEAD` 可解析的 SHA；如果 `baseline_ref: no-git` 但当前是 git 仓库，先把 state 修正为当前 HEAD 并记录原因。当前不是 git 仓库时才允许 `no-git`。
+2. 汇总所有 goal-features 中的必跑命令。
+3. 成本可接受时先跑一遍。
+4. 记录每条命令 green / red。
+5. red 时判断：既有问题 / 阻塞问题 / 无法归因。
+6. 如果 red 的原因是测试工具 / runner 缺失，优先把工具声明为项目测试依赖或使用项目已有 runner，再重跑原命令；不能创建同名本地 shim、假命令或伪测试结果来让命令变绿。
+7. 阻塞或无法归因时不要盲目继续；如果 roadmap 明确有 safety net feature，则先执行对应 feature，否则交还用户。
 
 ---
 
 ## Feature 循环
 
-按 `goal-state.yaml` 的 features 顺序循环。
+按 `goal-state.yaml` 的 `current_feature_index` 和 features 顺序循环。`current_feature_index` 是 0-based；展示给用户的 `Feature: N/总数` 使用 1-based。
 
 ### 1. 进入 feature
 
@@ -85,6 +98,7 @@ Evidence required: <证据列表>
 - 实现阶段不要修改 `checks`；checks 只由 acceptance 阶段从 `pending` 改为 `passed` 或 `failed`。
 - 每步留下证据：命令 / 手工 / 浏览器 / API / diff。
 - 每步做清洁度检查。
+- 普通实现完成汇报写入本 feature 证据记录；goal 模式不在这里停等用户 review。
 - 失败时走本文“失败恢复”。
 
 ### 3. 执行 cs-feat-review
@@ -136,12 +150,14 @@ Next: cs-feat-impl qa-fix then rerun cs-feat-review and cs-feat-qa
 - 先确认 `{feature-slug}-review.md` 存在、`status=passed`，且没有 unresolved blocking findings。
 - 再确认 `{feature-slug}-qa.md` 存在、`status=passed`，且没有 unresolved failed / blocked items。
 - 填 acceptance 报告。
+- acceptance frontmatter 必须是 `doc_type=feature-acceptance`、`status=passed`；无法通过时写 `status=blocked` 并 handoff。
 - 把 checklist checks 从 `pending` 更新为 `passed`；失败项先标 `failed`，修复并重验后再改 `passed`。
 - 更新 checklist 时只改目标 `steps` 或 `checks` 块，避免用全文件批量替换把 `steps.status` 和 `checks.status` 混在一起。
 - 按 design 第 4 节更新 architecture。
 - 按 requirement 字段回写 requirement。
 - 按 roadmap / roadmap_item 回写 items.yaml 和 roadmap 主文档。
 - 做 feature 级最终审计。
+- 普通 acceptance 的用户终审确认在 goal 模式下由 feature 验证标记和最终 roadmap 审计承接；不要逐 feature 停等终审。
 
 ### 6. Feature 验证标记
 
@@ -164,7 +180,7 @@ Knowledge candidates: <候选|none>
 全部通过后：
 
 1. 把 goal-state 当前 feature 状态改为 `accepted`。
-2. 把 current_feature 指向下一条。
+2. 把 `current_feature_index` 指向下一条。
 3. 确认 feature review 报告存在且 `status=passed`，没有 unresolved blocking findings。
 4. 确认 feature QA 报告存在且 `status=passed`，没有 unresolved failed / blocked items。
 5. 确认 feature checklist 中所有 steps 都是 `done`、所有 checks 都是 `passed`。
@@ -175,7 +191,7 @@ CS_ROADMAP_GOAL_FEATURE_DONE
 Feature <feature-slug> accepted. State updated.
 ```
 
-如果用户中途发新消息，在 feature 边界停下，询问是继续、修改后续 feature specs，还是停止。
+如果用户中途发新消息，先推进到最近的安全边界：实现中停在当前 step 验证并落状态后；review / QA / accept 中停在当前阶段报告落盘后。然后询问是继续、修改后续 feature specs，还是停止。不要在半写入状态直接切任务。
 
 ---
 
@@ -278,7 +294,7 @@ Commands to re-run: <去重命令列表>
 
 1. 重读 roadmap 主文档和 items.yaml。
 2. 确认每个 item 都是 `done`，或有理由 `dropped`。
-3. 重读每个 feature 的 design / checklist / review / QA / acceptance。
+3. 重读每个 feature 的 design / checklist / review / QA / acceptance，确认 acceptance `doc_type=feature-acceptance` 且 `status=passed`。
 4. 去重重跑必跑命令（成本过高时说明跳过原因）。
 5. 从仓库事实核验交付物：文件、配置 key、schema、路由、文档、roadmap 状态。
 6. 检查完整工作区：tracked / staged / unstaged / untracked。

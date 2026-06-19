@@ -165,6 +165,8 @@ description: 把"大到塞不进单个 feature"的需求做成完整事前规划
 
 **不改 requirements / architecture**——roadmap 是规划层，那两层只描述现状。拆解过程发现 req / 架构过时，在主文档"观察项"记一句给用户，不顺手改。
 
+如果用户想把整份 roadmap 自动推进到底，确认落盘后提示下一步可以走 `cs-roadmap-impl-goal`：它会先完成所有子 feature design + design review，再让用户二次确认，最后输出可直接运行的 goal 指令。
+
 ---
 
 ## 和 feature 流程的衔接
@@ -239,6 +241,7 @@ feature-design 发现接口契约不合理 / 漏了 / 描述不准 → **回 `cs
 | `cs-arch` 配合 | architecture 记现状、roadmap 记若干步。读 arch 理解现状但不改它 |
 | `cs-feat` 下游 | 每条子 feature 是未来一次 feature 流程的种子；起头时 design frontmatter 带 `roadmap` / `roadmap_item` |
 | `cs-feat-accept` 回写方 | acceptance 自动改 items.yaml 为 `done`，本技能只定义格式不负责回写 |
+| `cs-roadmap-impl-goal` 下游 | 用户确认 roadmap 后，可把所有子 feature design 和后续 impl / review / QA / accept 编排成可恢复的 goal |
 | `cs-onboard` 创建者 | 建 `roadmap/` 空目录 |
 | `cs-brainstorm` 上游 | case 3 移交本技能，带"真问题 / 大致范围 / 可能子模块"一句话汇总。本技能不重复分诊直接拆 |
 

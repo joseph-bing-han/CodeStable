@@ -48,7 +48,7 @@ def paseo_health() -> dict[str, object]:
     try:
         with urllib.request.urlopen(url, timeout=0.8) as response:
             return {
-                "ok": 200 <= response.status < 500,
+                "ok": 200 <= response.status < 400,
                 "url": url,
                 "status": response.status,
             }
@@ -104,7 +104,7 @@ def build_result() -> dict[str, object]:
 
     if paseo_cli or health.get("ok"):
         mode = "paseo-subagent"
-        reason = "Paseo is available; use an audit subagent when the runtime exposes Paseo tools."
+        reason = "Paseo appears available; use an audit subagent only when the runtime exposes Paseo tools or the CLI can be invoked."
     elif direct_agents:
         mode = "local-review-with-agent-cli-available"
         reason = "Direct agent CLIs exist, but cs-feat-review should not invoke them automatically."

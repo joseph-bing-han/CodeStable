@@ -58,14 +58,14 @@ description: feature design 人工确认前的方案审查 gate。对照 {slug}-
 先运行本 skill 自带检测脚本。按已加载的 `SKILL.md` 所在目录解析脚本路径，不要按业务仓库根目录猜路径：
 
 ```bash
-python scripts/detect-review-agent.py --pretty
+python3 scripts/detect-review-agent.py --pretty
 ```
 
 脚本只输出能力 JSON，不启动 agent、不改文件。
 
 优先级：
 
-1. **Paseo 可用**：优先用 Paseo 启动 `audit` 类 subagent 做只读独立审查。启动前先加载 / 读取 `paseo` skill 的当前说明，并遵守它的规则：读取 `~/.paseo/orchestration-preferences.json`，使用 `providers.audit`，不要硬编码 Claude 或 Codex。编写 design 的主 agent 是 Codex 且 `providers.audit` 指向 Claude / Opus 等不同 agent 时，必须使用该独立 reviewer；如果只能用同类 agent，在报告里记录降级和残余风险。不要无限轮询运行中的 agent；如果 reviewer 已启动但结果未返回，停止在 review gate，记录 pending/blocked，等待通知或用户决定。
+1. **Paseo 可用**：优先用 Paseo 启动 `audit` 类 subagent 做只读独立审查。检测脚本只能说明本机存在 Paseo 候选能力；真正启动前还要确认当前 agent runtime 暴露 Paseo 工具，或可调用检测结果里的 Paseo CLI。启动前先加载 / 读取 `paseo` skill 的当前说明，并遵守它的规则：读取 `~/.paseo/orchestration-preferences.json`，使用 `providers.audit`，不要硬编码 Claude 或 Codex。编写 design 的主 agent 是 Codex 且 `providers.audit` 指向 Claude / Opus 等不同 agent 时，必须使用该独立 reviewer；如果只能用同类 agent，在报告里记录降级和残余风险。没有可用工具 / CLI 时不要伪装启动，记录 `local-only` 或 `blocked` 原因。不要无限轮询运行中的 agent；如果 reviewer 已启动但结果未返回，停止在 review gate，记录 pending/blocked，等待通知或用户决定。
 2. **只有 claude / gemini / aider 等 CLI 可见**：不要自动调用。直接本地 review，除非用户显式要求使用某个 CLI。
 3. **没有外部 reviewer**：本地 review。
 

@@ -71,6 +71,14 @@ description: feature 流程阶段 3——验收闭环：对照 design 核实现 
 逐节填写**别跳节**。报告路径在 feature 目录下（位置看 `shared-conventions.md` 第 0 节）。
 
 ```markdown
+---
+doc_type: feature-acceptance
+feature: YYYY-MM-DD-slug
+status: passed|blocked
+accepted: YYYY-MM-DD
+round: 1
+---
+
 # {功能名称} 验收报告
 
 > 阶段：阶段 3（验收闭环）
