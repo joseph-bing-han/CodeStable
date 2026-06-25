@@ -57,8 +57,8 @@ def test_code_change_requires_worktree_unless_overridden(tmp_path: Path, monkeyp
     assert findings == []
 
 
-def test_path_named_codex_worktrees_is_not_linked_worktree(tmp_path: Path) -> None:
-    repo_parent = tmp_path / ".codex/worktrees"
+def test_path_named_worktree_dir_is_not_linked_worktree(tmp_path: Path) -> None:
+    repo_parent = tmp_path / ".worktree"
     repo_parent.mkdir(parents=True)
     repo = repo_parent / "plain-repo"
     repo.mkdir()

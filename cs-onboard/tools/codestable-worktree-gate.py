@@ -154,8 +154,8 @@ def quarantine_gate(root: Path, unit_value: str, apply: bool) -> dict[str, objec
     slug = unit_slug(unit_dir)
     findings: list[Finding] = []
     secret_untracked = has_secret_like_untracked(root)
-    target_branch = f"codex/quarantine-{slug}"
-    target_worktree = root / ".codex" / "worktrees" / f"quarantine-{slug}"
+    target_branch = f"worktree/quarantine-{slug}"
+    target_worktree = root / ".worktree" / f"quarantine-{slug}"
 
     if secret_untracked:
         findings.append(

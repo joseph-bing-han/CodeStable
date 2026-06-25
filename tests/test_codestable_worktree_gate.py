@@ -96,7 +96,7 @@ def test_start_gate_passes_in_real_linked_worktree_and_keeps_status_clean(tmp_pa
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add feature unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
 
     payload = gate.start_gate(worktree, ".codestable/features/2026-06-03-demo")
 
@@ -107,8 +107,8 @@ def test_start_gate_passes_in_real_linked_worktree_and_keeps_status_clean(tmp_pa
     assert run(worktree, "status", "--porcelain").stdout == ""
 
 
-def test_path_named_codex_worktrees_is_not_enough_for_linked_worktree(tmp_path: Path) -> None:
-    repo_parent = tmp_path / ".codex/worktrees"
+def test_path_named_worktree_dir_is_not_enough_for_linked_worktree(tmp_path: Path) -> None:
+    repo_parent = tmp_path / ".worktree"
     repo_parent.mkdir(parents=True)
     repo = repo_parent / "plain-repo"
     repo.mkdir()
@@ -310,7 +310,7 @@ def test_finish_gate_creates_learning_report_and_cross_worktree_inbox(tmp_path: 
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add completed unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
     (worktree / "src").mkdir()
     (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
     run(worktree, "add", "src/app.py")
@@ -332,12 +332,12 @@ def test_finish_gate_creates_learning_report_and_cross_worktree_inbox(tmp_path: 
     assert Path(payload["inbox_record"]).exists()
 
     inbox = inbox_tool.inbox(repo)
-    assert inbox["ready_to_merge"][0]["branch"] == "codex/demo"
+    assert inbox["ready_to_merge"][0]["branch"] == "worktree/demo"
     assert inbox["ready_to_merge"][0]["covered_head"] == head
 
     doctor = doctor_tool.diagnose(repo)
     assert doctor["status"] == "attention-needed"
-    assert doctor["ready_to_merge_worktrees"][0]["branch"] == "codex/demo"
+    assert doctor["ready_to_merge_worktrees"][0]["branch"] == "worktree/demo"
 
 
 def test_finish_gate_blocks_uncommitted_implementation_changes(tmp_path: Path) -> None:
@@ -346,7 +346,7 @@ def test_finish_gate_blocks_uncommitted_implementation_changes(tmp_path: Path) -
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add completed unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
     (worktree / "src").mkdir()
     (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
     run(worktree, "add", "src/app.py")
@@ -366,7 +366,7 @@ def test_worktree_inbox_marks_stale_after_new_branch_commit(tmp_path: Path) -> N
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add completed unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
     (worktree / "src").mkdir()
     (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
     run(worktree, "add", "src/app.py")
@@ -390,7 +390,7 @@ def test_worktree_inbox_marks_stale_when_only_covered_head_reaches_base(tmp_path
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add completed unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
     (worktree / "src").mkdir()
     (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
     run(worktree, "add", "src/app.py")
@@ -406,7 +406,7 @@ def test_worktree_inbox_marks_stale_when_only_covered_head_reaches_base(tmp_path
     inbox = inbox_tool.inbox(repo)
 
     assert inbox["ok"] is False
-    assert inbox["stale_reports"][0]["branch"] == "codex/demo"
+    assert inbox["stale_reports"][0]["branch"] == "worktree/demo"
     assert inbox["stale_reports"][0]["severity"] == "P1"
 
 
@@ -416,7 +416,7 @@ def test_finish_gate_refreshes_stale_learning_report(tmp_path: Path) -> None:
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add completed unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
     (worktree / "src").mkdir()
     (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
     run(worktree, "add", "src/app.py")
@@ -443,7 +443,7 @@ def test_worktree_inbox_marks_merged_after_base_contains_head(tmp_path: Path) ->
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add completed unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
     (worktree / "src").mkdir()
     (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
     run(worktree, "add", "src/app.py")
@@ -451,7 +451,7 @@ def test_worktree_inbox_marks_merged_after_base_contains_head(tmp_path: Path) ->
     payload = finish_gate.finish(worktree, ".codestable/features/2026-06-03-demo", ["pytest -> passed"])
     assert payload["ok"]
 
-    run(repo, "merge", "--ff-only", "codex/demo")
+    run(repo, "merge", "--ff-only", "worktree/demo")
     inbox = inbox_tool.inbox(repo)
 
     assert inbox["merged"][0]["status"] == "merged"
@@ -464,7 +464,7 @@ def test_worktree_inbox_allows_finish_artifact_only_commit(tmp_path: Path) -> No
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add completed unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
     (worktree / "src").mkdir()
     (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
     run(worktree, "add", "src/app.py")
@@ -476,7 +476,7 @@ def test_worktree_inbox_allows_finish_artifact_only_commit(tmp_path: Path) -> No
 
     inbox = inbox_tool.inbox(repo)
 
-    assert inbox["ready_to_merge"][0]["branch"] == "codex/demo"
+    assert inbox["ready_to_merge"][0]["branch"] == "worktree/demo"
     assert "finish artifacts" in inbox["ready_to_merge"][0]["reasons"][0]
     assert inbox["stale_reports"] == []
 
@@ -487,16 +487,16 @@ def test_worktree_inbox_marks_merged_after_branch_deleted(tmp_path: Path) -> Non
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add completed unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
     (worktree / "src").mkdir()
     (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
     run(worktree, "add", "src/app.py")
     run(worktree, "commit", "-m", "implement demo")
     payload = finish_gate.finish(worktree, ".codestable/features/2026-06-03-demo", ["pytest -> passed"])
     assert payload["ok"]
-    run(repo, "merge", "--ff-only", "codex/demo")
+    run(repo, "merge", "--ff-only", "worktree/demo")
     run(repo, "worktree", "remove", "--force", worktree.as_posix())
-    run(repo, "branch", "-d", "codex/demo")
+    run(repo, "branch", "-d", "worktree/demo")
 
     inbox = inbox_tool.inbox(repo)
 
@@ -511,7 +511,7 @@ def test_worktree_inbox_snooze_suppresses_ready_reminder_until_due(tmp_path: Pat
     run(repo, "add", ".codestable")
     run(repo, "commit", "-m", "add completed unit")
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "codex/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
     (worktree / "src").mkdir()
     (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
     run(worktree, "add", "src/app.py")
@@ -519,11 +519,11 @@ def test_worktree_inbox_snooze_suppresses_ready_reminder_until_due(tmp_path: Pat
     payload = finish_gate.finish(worktree, ".codestable/features/2026-06-03-demo", ["pytest -> passed"])
     assert payload["ok"]
 
-    snoozed = inbox_tool.snooze(repo, "codex/demo", "2999-01-01T00:00:00Z")
+    snoozed = inbox_tool.snooze(repo, "worktree/demo", "2999-01-01T00:00:00Z")
     inbox = inbox_tool.inbox(repo)
 
     assert snoozed["ok"]
     assert inbox["ok"]
     assert inbox["ready_to_merge"] == []
-    assert inbox["snoozed"][0]["branch"] == "codex/demo"
+    assert inbox["snoozed"][0]["branch"] == "worktree/demo"
     assert inbox["items"][0]["severity"] is None
