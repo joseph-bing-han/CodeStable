@@ -1,6 +1,6 @@
 ---
 name: cs-feat-accept
-description: feature 流程阶段 3——验收闭环：对照 design 核实现 + review 报告 + QA 报告或验收现场验证证据 + 回写 architecture / requirement / roadmap，最后产出 {slug}-acceptance.md。触发：用户说"功能写完了验收一下"、"做最后检查"、"准备 merge"、"出验收报告"。前置依赖 cs-feat-impl 完成、cs-feat-review 通过；如果未单独执行 cs-feat-qa，accept 必须现场补齐同等验证证据。
+description: feature 流程阶段 3——验收闭环：对照 design 核实现 + review 报告 + QA 报告或验收现场验证证据 + 回写 architecture / requirement / roadmap，最后产出 {slug}-acceptance.md。触发：用户说"功能写完了验收一下"、"做最后检查"、"准备 merge"、"出验收报告"。前置依赖 cs-feat-impl 完成、cs-code-review 通过；如果未单独执行 cs-feat-qa，accept 必须现场补齐同等验证证据。
 ---
 
 # cs-feat-accept
@@ -26,6 +26,10 @@ description: feature 流程阶段 3——验收闭环：对照 design 核实现 
 
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md` 第 0 节。
 
+## Task 接入
+
+等级 `auto`：落盘 `{slug}-acceptance.md` / 回写架构 / req / roadmap 前必须复用 / 创建当前 feature 的 Task List（`cs-task`），无 Task 不动手；每完成验收节产物先更新步骤状态与文档索引再继续。收口：本 skill 是 feature 末端，验收通过、用户终审后标 `completed` 并转 `cs-task` archive。
+
 ---
 
 ## 跟 design 的章节强依赖
@@ -49,7 +53,7 @@ description: feature 流程阶段 3——验收闭环：对照 design 核实现 
 1. **代码确实实现到位**——git status / 最近提交看到本功能改动，否则退回 implement
 2. **方案 doc 完整**——frontmatter `doc_type=feature-design` / `feature` 一致 / `status=approved` / `summary` 非空 / `tags` ≥ 2；标准 design 第 0/1/2/3 节 + 第 4 节已填写
 3. **`{slug}-checklist.yaml`**——存在且 `feature` 一致；`steps` 全 `done`（有 `pending` 退回 implement）；`checks` 非空全 `pending`
-4. **`{slug}-review.md`**——存在且 frontmatter `doc_type=feature-review`、`status=passed`；没有 unresolved `blocking` findings。缺失 → 先跑 `cs-feat-review`；有 blocking → 退回 `cs-feat-impl` review-fix；status 不是 passed → 不进入验收
+4. **`{slug}-review.md`**——存在且 frontmatter `doc_type=feature-review`、`status=passed`；没有 unresolved `blocking` findings。缺失 → 先跑 `cs-code-review`；有 blocking → 退回 `cs-feat-impl` review-fix；status 不是 passed → 不进入验收
 5. **验证证据来源**——独立 `cs-feat-qa` 不是 standalone accept 的硬前置；但验收必须有同等强度的验证证据：
    - 已有 `{slug}-qa.md`：读取并复核。frontmatter 必须 `doc_type=feature-qa`、`status=passed`；failed / blocked → 退回 `cs-feat-impl` qa-fix；status 不是 passed → 不进入验收。
    - 没有 `{slug}-qa.md`：不要强制切去跑 `cs-feat-qa`。在本次 accept 里建立 `Inline Verification Matrix`，对照 design 第 3 节、checklist checks、review Test And QA Focus / residual risk 和项目测试入口，现场运行验证，并把证据写入 acceptance 第 3 节和第 10 节最终审计。这个模式等价于“accept-inline QA”，但不额外生成 QA 报告。

@@ -17,6 +17,14 @@ description: roadmap 人工确认前的规划审查 gate。对照 roadmap 主文
 
 ---
 
+## Task 接入
+
+- 等级：`auto`。本审查复用当前 roadmap 流程的 Task List（`cs-task`），不另起一条。
+- `{slug}-roadmap-review.md` 落盘前复用当前流程 Task List，无 Task 不动手；产物落盘先更新 Task List 再继续。
+- review 非末端，不标 `completed`；收口由 roadmap 推进与后续 feature 流程负责。
+
+---
+
 ## 输入
 
 进入 review 前必须读取：

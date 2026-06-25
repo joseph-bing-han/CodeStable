@@ -15,6 +15,12 @@ description: feature design 人工确认前的方案审查 gate。对照 {slug}-
 
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md`。feature design 的具体结构以目标 `{slug}-design.md` / `{slug}-checklist.yaml` 和项目内共享口径为准。
 
+## Task 接入
+
+- 等级：`auto`。落盘 `{slug}-design-review.md` 前必须复用 / 创建当前 feature 的 Task List（`cs-task`），无 Task 不动手。
+- 审查报告落盘、verdict 定稿后，先更新 Task List 步骤状态与文档索引再继续。
+- 不标 `completed`：只把任务推进到下一阶段（passed → 用户整体 review；changes-requested / blocked → 回 `cs-feat-design`），feature Task 由末端 `cs-feat-accept` 收口。
+
 ---
 
 ## 输入

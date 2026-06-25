@@ -31,6 +31,14 @@ description: 把"大到塞不进单个 feature"的需求做成完整事前规划
 
 ---
 
+## Task 接入
+
+- 等级：`auto`。roadmap 是本大需求所有子 feature 的当前流程载体。
+- 首次落盘（主文档 / items.yaml）前复用或创建当前流程的 Task List（`cs-task`），无 Task 不动手；产物落盘先更新 Task List 再继续。
+- roadmap 非末端，不标 `completed`；推进交给后续 feature 流程收口。
+
+---
+
 ## 适用场景
 
 - 用户描述"一眼看出做不完"的大需求（"加权限系统"、"做通知中心"、"接 SSO"）

@@ -17,6 +17,14 @@ brainstorm 是"讨论层"统一入口。
 
 ---
 
+## Task 接入
+
+- 等级：`auto`（有落盘才生效）。纯讨论是创意空间，不建 Task。
+- 只有进入落盘分支（case 2 feature-brainstorm、case 4 创意记录等）、首次写产物前，才复用或创建当前流程的 Task List（`cs-task`）；落盘先更新 Task List 再继续。
+- brainstorm 非末端，不标 `completed`；移交 design / roadmap 后由下游流程收口。
+
+---
+
 ## 分诊
 
 ### 四种 case 速览

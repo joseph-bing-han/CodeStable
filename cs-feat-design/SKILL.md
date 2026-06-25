@@ -23,6 +23,10 @@ description: feature 流程阶段 1——为新功能起草 {slug}-design.md 和
 
 **推进原则**：design 要把后续执行需要的"操作手册"写到位：当前基线怎么确认、每步完成后看什么证据、哪些命令必须重跑、哪些交付物要真实落盘、失败时回到哪个契约修。否则 implement 只能临场判断，review 没有稳定契约可审，QA 不知道该跑什么证据，acceptance 也只能相信实现汇报。
 
+## Task 接入
+
+等级 `auto`：首次落盘 design / checklist 前必须复用 / 创建当前 feature 的 Task List（`cs-task`），无 Task 不动手；每产出阶段产物先更新步骤状态与文档索引再继续。不标 `completed`，approved 后只推进到 `cs-feat-impl`，feature Task 由末端 `cs-feat-accept` 收口。
+
 ---
 
 ## 初始化模式：帮用户建目录和 intent 草稿
