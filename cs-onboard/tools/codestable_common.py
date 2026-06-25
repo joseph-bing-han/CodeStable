@@ -276,7 +276,7 @@ def unit_slug(unit_dir: Path) -> str:
 
 
 def review_file_for(unit_dir: Path) -> Path:
-    return unit_dir / f"{unit_slug(unit_dir)}-implementation-review.md"
+    return unit_dir / f"{unit_slug(unit_dir)}-review.md"
 
 
 def all_checklist_steps_done(path: Path) -> bool:
@@ -366,7 +366,7 @@ def missing_review_findings(root: Path, units: list[Path]) -> list[Finding]:
             findings.append(
                 Finding(
                     severity="P1",
-                    message="Completed CodeStable implementation unit is missing implementation review evidence.",
+                    message="Completed CodeStable implementation unit is missing code review evidence ({slug}-review.md).",
                     path=review_path.as_posix(),
                 )
             )

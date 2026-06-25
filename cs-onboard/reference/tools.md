@@ -103,7 +103,7 @@ python3 .codestable/tools/validate-yaml.py --dir {目录} --require doc_type --r
 
 ## 3. validate-implementation-review.py
 
-实现完成门禁。用于 Stop hook 或手动检查：有实现代码变更时应在 linked worktree 内执行；已完成的 feature / issue / refactor 要有 `{slug}-implementation-review.md`，且默认必须声明 subagent reviewer。
+实现完成门禁。用于 Stop hook 或手动检查：有实现代码变更时应在 linked worktree 内执行；已完成的 feature / issue / refactor 要有 `{slug}-review.md`，且默认必须声明 subagent reviewer。
 
 ```bash
 python3 .codestable/tools/validate-implementation-review.py --root . --json
@@ -217,7 +217,7 @@ python3 .codestable/tools/build-review-packet.py --root . --unit .codestable/fea
 - `quality`：检查可维护性、安全、边界条件、测试缺口、幂等和 crash-resume 等工程质量。
 - `verification`：只看 fresh validation evidence；必须传 `--validation` 或 `--validation-file`，不能接受记忆里的“已跑过”。
 
-适用时机：feature / issue / refactor 代码写完、owner 验证命令跑完之后，触发 subagent reviewer 之前。reviewer 只审查，不修改代码。review 结果仍要落到 `{slug}-implementation-review.md`，packet 只是输入材料。
+适用时机：feature / issue / refactor 代码写完、owner 验证命令跑完之后，触发 subagent reviewer 之前。reviewer 只审查，不修改代码。review 结果仍要落到 `{slug}-review.md`，packet 只是输入材料。
 
 输出内容：
 

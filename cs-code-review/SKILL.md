@@ -151,6 +151,12 @@ Paseo subagent prompt 必须只给原始材料和边界，不透露本地 review
 - `changes-requested`：有 blocking，或 important 多到会影响验收可信度。
 - `blocked`：缺少关键输入、diff 归因无法判断、设计/实现状态不满足 review 前置条件，或本轮已启动 independent reviewer 但结果仍 pending / failed / blocked 且用户尚未确认降级。
 
+**`reviewer` 字段（gate 锚点）**：`{slug}-review.md` 的 frontmatter `reviewer` 决定下游 worktree / commit / finish gate 是否放行，按「独立 reviewer 增强项」实际三态写：
+
+- independent reviewer completed 并已合并核验 → `reviewer: subagent`。
+- 没启动外部 reviewer（local-only / skipped-by-user）→ `reviewer: self`；gate 默认要求 `subagent`，`self` 需配 `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` 才放行。
+- pending / failed / blocked → 不定稿 `passed`，也不写 `reviewer: subagent`。
+
 ---
 
 ## 严重度
@@ -207,6 +213,7 @@ Paseo subagent prompt 必须只给原始材料和边界，不透露本地 review
 - [ ] 已做整体审查和行级审查。
 - [ ] 已明确区分 blocking / important / nit / suggestion / learning / praise / residual-risk。
 - [ ] 已写来源 spec 目录下的 `{slug}-review.md`（feature 即 `.codestable/features/{feature}/{slug}-review.md`）。
+- [ ] `status: passed` 时 frontmatter `reviewer` 已按独立 review 实际写 `subagent`（或确属无 subagent 平台的 `self` fallback）——这是下游 gate 的放行锚点。
 - [ ] 有 blocking 时没有进入下游，而是指向来源实现技能的 review-fix。
 - [ ] 无 blocking 时明确告诉用户「进入来源」表的通过后去向（feature→`cs-feat-qa`）。
 

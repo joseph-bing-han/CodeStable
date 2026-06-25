@@ -10,13 +10,14 @@
 | issue | `issue-review` | `issue: YYYY-MM-DD-slug` |
 | refactor / refactor-ff | `refactor-review` | `refactor: YYYY-MM-DD-slug` |
 
-`status` / `reviewed` / `round` 各来源通用。
+`status` / `reviewed` / `round` 各来源通用。`reviewer` 是 gate 锚点字段：启用了独立 subagent review 时写 `subagent`，仅本地 self review 时写 `self`。worktree / commit / finish gate 默认要求 `reviewer: subagent`；`self` 需配 `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` 才放行。`status: passed` 时必填 `reviewer`。
 
 ```markdown
 ---
 doc_type: feature-review
 feature: YYYY-MM-DD-slug
 status: passed|changes-requested|blocked
+reviewer: subagent|self
 reviewed: YYYY-MM-DD
 round: 1
 ---

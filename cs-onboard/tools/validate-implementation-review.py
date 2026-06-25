@@ -2,8 +2,8 @@
 """Gate CodeStable implementation handoffs.
 
 Implementation diffs should run in a linked worktree. Completed CodeStable
-implementation units should carry subagent implementation-review evidence before
-the agent reports done.
+implementation units should carry subagent code-review evidence ({slug}-review.md)
+before the agent reports done.
 """
 
 from __future__ import annotations
@@ -136,7 +136,7 @@ def unit_dir_for(path: str) -> Path | None:
 
 def review_file_for(unit_dir: Path) -> Path:
     slug = unit_dir.name.split("-", 3)[-1]
-    return unit_dir / f"{slug}-implementation-review.md"
+    return unit_dir / f"{slug}-review.md"
 
 
 def all_checklist_steps_done(path: Path) -> bool:
@@ -238,7 +238,7 @@ def validate(root: Path) -> tuple[bool, list[Finding], dict[str, object]]:
             findings.append(
                 Finding(
                     severity="P1",
-                    message="Completed CodeStable implementation unit is missing implementation review evidence.",
+                    message="Completed CodeStable implementation unit is missing code review evidence ({slug}-review.md).",
                     path=path,
                 )
             )
