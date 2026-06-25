@@ -176,7 +176,7 @@ Copy-Item -Recurse -Force <技能包路径>\cs-onboard\hooks\*      .codestable\
 
 ## 分支保护 hook（可选）
 
-`.codestable/hooks/hooks.codex.json` 注册一个 `PreToolUse` 钩子，调用 `.codestable/tools/codestable-ai-branch-guard.py`，在 AI 试图于 `main`/`master` 等受保护分支上 Edit/Write/Bash 改代码时拦截，强制改动落到 linked worktree 的 `worktree/*` 分支。详细规则见 `.codestable/reference/branch-guard-hooks.md`。
+`.codestable/hooks/hooks.codex.json` 注册一个 `PreToolUse` 钩子，调用 `.codestable/tools/codestable-ai-branch-guard.py`，在 AI 试图于 `main`/`master` 等受保护分支上 Edit/Write/Bash 改代码时拦截，强制改动落到 linked worktree 的类型分支（`feat/` / `fix/` / `refactor/`）。详细规则见 `.codestable/reference/branch-guard-hooks.md`。
 
 - **接入**：把 `hooks.codex.json` 的内容合并进 agent 的 hook 配置（Claude Code `.claude/settings.json` 或 Codex 等价位置）。onboard 只释放文件，**不自动改 agent 全局配置**——是否启用由 owner 决定。
 - **侵入性**：启用后日常在 main 上的直接编辑会被挡下，需走 worktree 流程。不想要这套强约束就不接入，留着 `tools/` 里的 gate 脚本手动调用即可。

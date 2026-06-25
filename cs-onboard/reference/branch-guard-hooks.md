@@ -7,7 +7,7 @@ meant to run before AI tool calls, and it can also install Git hook fallbacks.
 
 - AI must not run `git switch` or `git checkout` in an existing checkout.
 - AI must not edit implementation files on `main` or `master`.
-- AI must use a linked execution worktree on a `worktree/...` branch for code work.
+- AI must use a linked execution worktree on a typed branch (`feat/` / `fix/` / `refactor/`) for code work.
 - Planning files such as `.codestable/**` can still be edited in the coordinator
   checkout when the agent hook payload names those files directly.
 
@@ -54,7 +54,7 @@ publish window. Start the window from a clean `main` checkout that matches
 ```bash
 python3 .codestable/tools/codestable-main-publish.py --root . --json begin \
   --owner-intent "owner approved publishing branch X to main" \
-  --branch worktree/example
+  --branch feat/example
 ```
 
 Then run the merge / validation / push. The guard allows `git merge`,

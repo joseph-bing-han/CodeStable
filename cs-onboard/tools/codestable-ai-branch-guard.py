@@ -294,7 +294,7 @@ def guard_payload(payload: dict[str, Any], root: Path, protected: set[str]) -> G
             reason, paths = blocked
             return GuardResult(
                 False,
-                "AI agents must not perform protected-branch development. Use a linked execution worktree on a worktree/... branch.",
+                "AI agents must not perform protected-branch development. Use a linked execution worktree on a typed branch (feat/fix/refactor/...).",
                 reason,
                 branch,
                 linked,
@@ -306,7 +306,7 @@ def guard_payload(payload: dict[str, Any], root: Path, protected: set[str]) -> G
         if impl_paths and not (intent and merge_in_progress(root)):
             return GuardResult(
                 False,
-                "AI agents must not edit implementation files on main/master. Use a linked execution worktree on a worktree/... branch.",
+                "AI agents must not edit implementation files on main/master. Use a linked execution worktree on a typed branch (feat/fix/refactor/...).",
                 "implementation_edit_on_protected_branch",
                 branch,
                 linked,

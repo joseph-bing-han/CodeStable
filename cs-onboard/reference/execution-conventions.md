@@ -11,7 +11,7 @@ CodeStable separates discussion / planning from code edits:
 - **Main coordination checkout**: where the owner discusses requirements and
   writes design / analysis / roadmap / checklist, usually the `main` checkout.
 - **Execution worktree**: where code changes happen. Each feature / issue /
-  refactor uses its own git worktree and `worktree/...` branch unless the owner
+  refactor uses its own git worktree and a typed branch (`feat/{slug}` / `fix/{slug}` / `refactor/{slug}`) unless the owner
   explicitly approves direct edits in the current checkout.
 
 Goal work may use `.codestable/goals/YYYY-MM-DD-{slug}` as the wrapper unit, but

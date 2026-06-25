@@ -58,7 +58,7 @@ def init_repo_with_remote(tmp_path: Path) -> Path:
 
 def test_blocks_git_switch_command(tmp_path: Path) -> None:
     repo = init_repo(tmp_path)
-    payload = {"tool_name": "Bash", "tool_input": {"command": "git switch worktree/demo"}}
+    payload = {"tool_name": "Bash", "tool_input": {"command": "git switch feat/demo"}}
 
     result = guard.guard_payload(payload, repo, {"main", "master"})
 
@@ -68,7 +68,7 @@ def test_blocks_git_switch_command(tmp_path: Path) -> None:
 
 def test_blocks_git_switch_with_global_options(tmp_path: Path) -> None:
     repo = init_repo(tmp_path)
-    payload = {"tool_name": "Bash", "tool_input": {"command": f"git -C {repo.as_posix()} switch worktree/demo"}}
+    payload = {"tool_name": "Bash", "tool_input": {"command": f"git -C {repo.as_posix()} switch feat/demo"}}
 
     result = guard.guard_payload(payload, repo, {"main", "master"})
 
@@ -80,7 +80,7 @@ def test_allows_git_worktree_add_command(tmp_path: Path) -> None:
     repo = init_repo(tmp_path)
     payload = {
         "tool_name": "Bash",
-        "tool_input": {"command": "git worktree add -b worktree/demo .worktree/demo HEAD"},
+        "tool_input": {"command": "git worktree add -b feat/demo .worktree/demo HEAD"},
     }
 
     result = guard.guard_payload(payload, repo, {"main", "master"})
@@ -141,8 +141,8 @@ def test_owner_intent_allows_merge_command_but_not_switch(tmp_path: Path) -> Non
     repo = init_repo_with_remote(tmp_path)
     main_publish.begin(repo, "main", "origin", [], "owner approved release", 5)
 
-    merge_payload = {"tool_name": "Bash", "tool_input": {"command": "git merge origin/worktree/demo"}}
-    switch_payload = {"tool_name": "Bash", "tool_input": {"command": "git switch worktree/demo"}}
+    merge_payload = {"tool_name": "Bash", "tool_input": {"command": "git merge origin/feat/demo"}}
+    switch_payload = {"tool_name": "Bash", "tool_input": {"command": "git switch feat/demo"}}
 
     assert guard.guard_payload(merge_payload, repo, {"main", "master"}).ok
     assert guard.guard_payload(switch_payload, repo, {"main", "master"}).reason == "branch_switch_command"
@@ -161,16 +161,16 @@ def test_owner_intent_does_not_allow_force_push(tmp_path: Path) -> None:
 
 def test_owner_intent_allows_real_hooked_merge_and_push(tmp_path: Path) -> None:
     repo = init_repo_with_remote(tmp_path)
-    run(repo, "switch", "-c", "worktree/demo")
+    run(repo, "switch", "-c", "feat/demo")
     (repo / "README.md").write_text("published\n", encoding="utf-8")
     run(repo, "add", "README.md")
     run(repo, "commit", "-m", "demo change")
-    run(repo, "push", "-u", "origin", "worktree/demo")
+    run(repo, "push", "-u", "origin", "feat/demo")
     run(repo, "switch", "main")
     guard.install_git_hooks(repo, force=False)
 
-    main_publish.begin(repo, "main", "origin", ["worktree/demo"], "owner approved release", 5)
-    merge = run(repo, "merge", "--no-ff", "--no-edit", "origin/worktree/demo", check=False)
+    main_publish.begin(repo, "main", "origin", ["feat/demo"], "owner approved release", 5)
+    merge = run(repo, "merge", "--no-ff", "--no-edit", "origin/feat/demo", check=False)
     push = run(repo, "push", "origin", "main", check=False)
     ended = main_publish.end(repo)
 
@@ -182,7 +182,7 @@ def test_owner_intent_allows_real_hooked_merge_and_push(tmp_path: Path) -> None:
 def test_allows_implementation_edit_in_linked_worktree_branch(tmp_path: Path) -> None:
     repo = init_repo(tmp_path)
     worktree = tmp_path / "repo-worktree"
-    run(repo, "worktree", "add", "-b", "worktree/demo", worktree.as_posix())
+    run(repo, "worktree", "add", "-b", "feat/demo", worktree.as_posix())
     payload = {"tool_name": "Write", "tool_input": {"file_path": worktree / "src/app.py"}}
 
     result = guard.guard_payload(payload, worktree, {"main", "master"})
