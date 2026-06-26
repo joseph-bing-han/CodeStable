@@ -12,7 +12,7 @@ Tired of OpenSpec's flimsiness, Oh-My-OpenAgent's over-engineering, and Superpow
 
 <p>
   <img src="https://img.shields.io/badge/status-beta-F59E0B?style=flat-square" alt="Status"/>
-  <img src="https://img.shields.io/badge/skills-22-6366F1?style=flat-square" alt="Skills"/>
+  <img src="https://img.shields.io/badge/cs--skills-27-6366F1?style=flat-square" alt="CodeStable Skills"/>
   <img src="https://img.shields.io/badge/license-MIT-10B981?style=flat-square" alt="License"/>
 </p>
 
@@ -87,28 +87,34 @@ I built CodeStable because I believe **the chaos of software engineering isn't r
 
 ---
 
-## Design: 6 entities + 3 flows
+## Design: entities + flows
 
-CodeStable models real coding work as **6 entities** and **3 flows**.
+CodeStable models real coding work as a set of **entities** and **flows**.
 
-### 6 entities
+### Entities
 
 | Entity | Slug | What it does |
 |------|------|--------|
 | **Requirement** | requirements | User stories + domain glossary (CONTEXT.md) + architecture decisions (ADRs). The escape hatch — when code rots, you can throw it all out and let AI regenerate from these |
 | **Roadmap** | roadmap | "I want a permission system" — too big to throw at AI as a feature; cut it into a roadmap and advance step by step |
+| **Goal** | goals | Bounded start/end: write a start report, then let AI iterate autonomously on implementation/validation, with subagent functional acceptance before completion |
 | **Feature** | feature | The actual engineering execution. Human and AI collaborate, jointly responsible for design / implementation / acceptance |
 | **Issue** | issue | The bug list after release. AI and human solve it together |
 | **Refactor** | refactor | Cleanup process when code rots (beta) |
 | **Compound** | compound | The compounding-engineering knowledge base — pitfalls, tricks, investigation notes |
 
-### 3 flows
+### Flows
 
 | Flow | Key skill chain | Notes |
 |------|------------|------|
-| **Feature delivery** | `cs-feat` → `cs-feat-design` → `cs-feat-impl` → `cs-feat-accept` | Think it through → integrated design → step-by-step coding → acceptance. Whatever order suits you |
-| **Issue fixing** | `cs-issue-report` → `cs-issue-analyze` → `cs-issue-fix` | Tell AI what's wrong → AI finds the root cause → AI fixes precisely |
-| **Refactoring** | `cs-refactor` (beta) | Architectural rot doesn't happen overnight. AI assists, but **humans refactor**. Still iterating — feedback welcome |
+| **Feature delivery** | `cs-feat` → `cs-feat-design` → `cs-feat-design-review` → `cs-feat-impl` → `cs-code-review` → `cs-feat-qa` → `cs-feat-accept` | Think it through → design review → step-by-step coding → code review → QA → acceptance |
+| **Goal achievement** | `cs-goal` | Bounded start/end → interview/grill + start report → autonomous implement/validate/iterate → subagent functional acceptance before completion |
+| **Issue fixing** | `cs-issue-report` → `cs-issue-analyze` → `cs-issue-fix` → `cs-code-review` | Tell AI what's wrong → AI finds the root cause → AI fixes precisely → independent review before commit |
+| **Refactoring** | `cs-refactor` (beta) → `cs-code-review` | Architectural rot doesn't happen overnight. AI assists, but **humans refactor**. Still iterating — feedback welcome |
+
+`cs-code-review` is the cross-cutting quality gate at the tail of every execution flow, before commit — feature, fast path, issue fixing, and refactoring all route their pre-commit diff review through it. At a phase or milestone boundary, use `cs-docs-neat` to reconcile `.codestable/`, README/docs, `CLAUDE.md` / `AGENTS.md`, and agent memory so docs do not drift from code.
+
+> Strong branch protection: `cs-onboard` can optionally release the `codestable-ai-branch-guard` hook, which blocks AI from implementing directly on `main`/`master` and forces a worktree. See the "branch protection hook" section in `cs-onboard`.
 
 ---
 
@@ -122,9 +128,11 @@ CodeStable models real coding work as **6 entities** and **3 flows**.
 <tr><td><code>cs-domain</code></td><td>Maintain <code>requirements/CONTEXT.md</code> glossary + <code>requirements/adrs/</code> architecture decisions (3-criteria gate + Nygard 4 sections) + single/multi context topology</td></tr>
 <tr><td><b>Roadmap</b></td><td><code>cs-roadmap</code></td><td>Up-front planning for a big chunk of work: high-level design + interface contracts + sub-feature breakdown</td></tr>
 <tr><td><b>Discussion entry</b></td><td><code>cs-brainstorm</code></td><td>Triage when ideas are still fuzzy: route to design / continue in a feature / hand off to roadmap</td></tr>
-<tr><td rowspan="5"><b>Feature flow</b></td><td><code>cs-feat</code></td><td>Sub-flow entry for new features</td></tr>
+<tr><td><b>Goal</b></td><td><code>cs-goal</code></td><td>Bounded start/end: write a start report, let AI iterate autonomously, with subagent functional acceptance before completion</td></tr>
+<tr><td rowspan="6"><b>Feature flow</b></td><td><code>cs-feat</code></td><td>Sub-flow entry for new features</td></tr>
 <tr><td><code>cs-feat-design</code></td><td>Draft <code>{slug}-design.md</code> as the single input for what follows</td></tr>
 <tr><td><code>cs-feat-impl</code></td><td>Code in the order the design lays out</td></tr>
+<tr><td><code>cs-code-review</code></td><td>Cross-cutting read-only code review gate before commit; produces <code>{slug}-review.md</code></td></tr>
 <tr><td><code>cs-feat-accept</code></td><td>Verify implementation against the design layer by layer; close the loop</td></tr>
 <tr><td><code>cs-feat-ff</code></td><td>Ultra-light lane: no design, no phases, AI just does it</td></tr>
 <tr><td rowspan="4"><b>Issue flow</b></td><td><code>cs-issue</code></td><td>Sub-flow entry for issue fixing</td></tr>
@@ -138,11 +146,13 @@ CodeStable models real coding work as **6 entities** and **3 flows**.
 <tr><td><code>cs-doc-api</code></td><td>API reference reverse-engineered from source (entry-by-entry, parts lookup)</td></tr>
 </table>
 
+See [SKILL_CATALOG.en.md](./SKILL_CATALOG.en.md) for the full catalog. In daily use, call `/cs` when you are unsure; it routes your intent to the right skill.
+
 ---
 
 ## Workflow at a glance
 
-CodeStable's skills aren't a single linear pipeline — they're **layered + event-driven**:
+CodeStable's skills are **layered + event-driven**: root routing, onboard, long-lived archives, roadmap planning, feature / issue / refactor execution flows, and cross-cut knowledge sinking.
 
 ```
 ═══════════════════════════════════════════════════════════════════════
@@ -201,20 +211,20 @@ CodeStable's skills aren't a single linear pipeline — they're **layered + even
  Layer 3 · Execution flows (pick one per event type)
 ───────────────────────────────────────────────────────────────────────
 
-  ▸ Event: new capability                                  ┌──────────┐
-       cs-feat-design ──▶ cs-feat-impl ──▶ cs-feat-accept  │ features │
-       cs-feat-ff     ──(light lane, skips design/accept)─▶│ /YYYY-…/ │
-                                                            └──────────┘
+  ▸ Event: new capability                                      ┌──────────┐
+       cs-feat-design ─▶ cs-feat-impl ─▶ cs-code-review ─▶     │ features │
+                                         cs-feat-qa ─▶ cs-feat-accept │ /YYYY-…/ │
+       cs-feat-ff     ──(light lane, skips design/accept)─▶     └──────────┘
 
-  ▸ Event: fix a defect                                     ┌──────────┐
-       cs-issue-report ──▶ cs-issue-analyze ──▶ cs-issue-fix│  issues  │
-                                                            │ /YYYY-…/ │
-                                                            └──────────┘
+  ▸ Event: fix a defect                                         ┌──────────┐
+       cs-issue-report ─▶ cs-issue-analyze ─▶ cs-issue-fix ─▶   │  issues  │
+                                              cs-code-review    │ /YYYY-…/ │
+                                                                └──────────┘
 
-  ▸ Event: code rot (beta)                                  ┌──────────┐
-       cs-refactor / cs-refactor-ff                         │refactors │
-                                                            │ /YYYY-…/ │
-                                                            └──────────┘
+  ▸ Event: code rot (beta)                                      ┌──────────┐
+       cs-refactor / cs-refactor-ff ─▶ cs-code-review            │refactors │
+                                                                 │ /YYYY-…/ │
+                                                                 └──────────┘
 ═══════════════════════════════════════════════════════════════════════
                               │
                 ▼ trigger any time something is worth recording ▼
@@ -235,11 +245,13 @@ CodeStable's skills aren't a single linear pipeline — they're **layered + even
 - **Layer 3 is event-driven**: new need → feature flow, bug → issue flow, rot → refactor flow
 - **Cross-cut is the flywheel**: any flow can trigger a sink when something is worth keeping; the next round of work reads it back. This is the physical implementation of CodeStable's "compounding"
 
+`cs-code-review` is the cross-cutting quality gate at the tail of the feature / issue / refactor execution flows, before commit. See [WORKFLOW.en.md](./WORKFLOW.en.md) for the full diagram.
+
 ---
 
 ## Runtime structure
 
-After `/cs-onboard`, a `codestable/` directory appears at your project root — the aggregate root for all CodeStable artifacts and the **only** workspace each skill reads/writes at runtime.
+After `/cs-onboard`, a `.codestable/` directory appears at your project root as the aggregate root for requirements, architecture, roadmap, goals, features, issues, refactors, audits, compound, tools, hooks, and reference.
 
 ```
 your-project/
@@ -309,7 +321,7 @@ your-project/
 >
 > Cross-skill shared references must go through the "working project" layer: `cs-onboard` copies them from the skill package to the project's `codestable/reference/`, and other skills read them via the project-relative path.
 
-To change shared conventions, edit the templates under `cs-onboard/reference/`; new projects pick them up at onboard time.
+To change shared conventions, edit the templates under `cs-onboard/reference/`; new projects pick them up at onboard time. See [WORKFLOW.en.md](./WORKFLOW.en.md) for the full directory model and cross-skill reference constraints.
 
 ---
 

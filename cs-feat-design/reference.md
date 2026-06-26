@@ -52,7 +52,7 @@ checks:
     status: pending
 ```
 
-`steps`（design 阶段产出）：
+`steps`（design draft 成型后先产出，供 `cs-feat-design-review` 和用户 review；用户确认后随 design 一起进入实现）：
 
 - 粒度是 paradigm 维度，**不写 file:line / 函数级**——具体落点是 implement 的事
 - 切片顺序"最简 Workflow 先行 → 逐个节点填充"：
@@ -61,7 +61,7 @@ checks:
 - 4-8 步；每步必须有可独立验证的退出信号
 - 第 2.5 节结论是"微重构"时，**第 1 步固定是"按第 2.5 节方案做微重构（只搬不改行为）"**，独立退出信号（如"全部测试通过 + 编译绿灯 + 行为相关 diff 为零"），跑通后再进 feature 主体步骤
 
-`checks`（design 阶段产出，提取来源）：
+`checks`（design draft 成型后先产出，提取来源）：
 
 - 名词契约 ← 第 2.1 节关键接口签名
 - 编排骨架 / 流程级约束 ← 第 2.2 节主流程关键步骤、流程级约束
@@ -234,3 +234,5 @@ implement 完成的判据，acceptance 核对的依据。**不写测试代码 / 
 > 7. 第 3 节验收场景：覆盖正常 + 边界 + 错误路径了吗？
 >
 > 有修改意见直接说，确认后进入实现阶段。
+
+> 人工 review 前必须先有 `{slug}-design-review.md` 且 `status: passed`。用户修改 design/checklist 后，实质变化要重跑 `cs-feat-design-review`。

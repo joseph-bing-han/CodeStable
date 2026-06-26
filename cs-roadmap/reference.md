@@ -12,7 +12,7 @@ SKILL.md 只保留流程骨架，具体格式在这里。
 ---
 doc_type: roadmap
 slug: permission-system
-status: active          # active | paused | completed
+status: draft           # draft | active | paused | completed
 created: YYYY-MM-DD
 last_reviewed: YYYY-MM-DD
 tags: [permission, auth]
@@ -21,7 +21,7 @@ related_architecture: []    # 相关 architecture doc slug，可空
 ---
 ```
 
-- `status`：`active` 进行中 / `paused` 暂停 / `completed` 所有条目 done 或 dropped
+- `status`：`draft` 待独立 review 和用户确认 / `active` 进行中 / `paused` 暂停 / `completed` 所有条目 done 或 dropped
 - `related_requirements`：本大需求涉及的 req slug，帮助跳转到"为什么要有这个能力"
 - `related_architecture`：会被改到的 architecture doc slug，帮助理解"改了会触碰哪些现状"
 
@@ -230,4 +230,6 @@ python .codestable/tools/validate-yaml.py --file .codestable/roadmap/{slug}/{slu
 > 8. "明确不做"有遗漏？
 > 9. 排期顺序符合你的产品优先级？
 >
-> 有修改意见直接说，确认后落盘 roadmap 目录和 items.yaml。
+> 有修改意见直接说，确认后把 roadmap 从 `draft` 标为 `active`。
+
+> 人工 review 前必须先有 `{slug}-roadmap-review.md` 且 `status: passed`。用户修改 roadmap/items 后，实质变化要重跑 `cs-roadmap-review`。

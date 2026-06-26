@@ -15,9 +15,11 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 
 **做事**——从一段模糊想法走到上线的功能、或者从一份错误报告走到修好的 bug:
 
-- `cs-feat` — 新功能,design → implement → acceptance（想法还模糊时先走讨论层 `cs-brainstorm` 做分诊，不属于 feature 流程内部）
+- `cs-feat` — 新功能,design → design-review → implement → code-review → QA → acceptance（想法还模糊时先走讨论层 `cs-brainstorm` 做分诊，不属于 feature 流程内部）
+- `cs-goal` — 目标达成,限定起点/终点 → interview/grill 写起点报告 → 自主迭代实现/验证 → 完成前 subagent 功能验收
 - `cs-issue` — 修 bug,report → analyze → fix
 - `cs-refactor` — 代码优化(行为不变、结构/性能/可读性变),scan → design → apply
+- `cs-code-review` — 各执行流末端、commit 前的横切独立 diff 评审（质量门禁）
 
 两类都不直接让 AI 写代码,而是先产出 spec(功能方案 / 问题分析),用户 review 后再动手,代码和 doc 一起交付。针对的是术语冲突、范围失控、改完不留存档这三种 AI 默认会出的问题。
 
@@ -36,8 +38,13 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 - `cs-req` — 起草或刷新 `.codestable/requirements/` 下的需求文档——系统的能力愿景层，覆盖过去/现在/未来
 - `cs-domain` — 领域模型一站式：CONTEXT.md 术语维护 + ADR 决策记录（守门 3 判据 + Nygard 四节）+ 单/多 context 拓扑管理
 - `cs-roadmap` — 把一块装不进单个 feature 的大需求拆成带依赖和状态的子 feature 清单,作为后续多次 feature 流程的种子和排期依据;独立于需求 / 架构档案
+- `cs-roadmap-review` — roadmap 人工确认前的只读规划审查 gate
+- `cs-roadmap-impl-goal` — 把已确认 roadmap 编排成可直接运行的 goal,逐个 feature 衔接 design / impl / review / QA / accept
+- `cs-feat-design-review` — feature design 人工确认前的只读方案审查 gate
 - `cs-doc-tutorial` — 写给外部读者的开发者指南 / 用户指南（任务导向）
 - `cs-doc-api` — 为公开 API 逐条目生成参考文档（从源码反推）
+- `cs-docs-neat` — 阶段 / 里程碑收尾时，全局整理 `.codestable/`、README/docs、`CLAUDE.md` / `AGENTS.md` 和 agent 记忆，做反膨胀、补漏和冲突修正
+- `codestable-maintainer` — 维护 CodeStable 自身技能库 / harness / verifier / installed copy（源仓分支验证 + main-only 同步）
 
 
 ## 场景路由
@@ -48,14 +55,20 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 |---|---|
 | 想法还模糊 / "有个想法没想清楚" / "先聊聊" | `cs-brainstorm`(分诊后路由到 design / feature-brainstorm 落盘 / roadmap) |
 | 新功能 / 新能力 | `cs-feat` |
+| 限定起点/终点的目标达成 / "自主迭代直到完成" | `cs-goal` |
 | BUG / 异常 / 文档错误 | `cs-issue` |
 | 代码优化 / 重构 / 重写(行为不变) | `cs-refactor` |
+| 合并前代码评审 / "code review" / 准备 PR / merge | `cs-code-review` |
 | 摸代码、提问调研 / 踩坑回顾 / 技术选型沉淀 / 可复用模式 | `cs-keep` |
 | 补 / 更新需求文档 | `cs-req` |
 | 拍板技术决策 / 加术语 / 项目要分子系统 | `cs-domain` |
 | 大需求拆解 / 排期规划 | `cs-roadmap` |
+| roadmap 人审前规划审查 | `cs-roadmap-review` |
+| 推进已有 roadmap / 执行整个 roadmap | `cs-roadmap-impl-goal` |
+| feature design 人审前方案审查 | `cs-feat-design-review` |
 | 开发者指南 / 用户指南 | `cs-doc-tutorial` |
 | 库 API 参考 | `cs-doc-api` |
+| 阶段收尾 / 整理文档 / 同步 agent 入口 / 新人交接 | `cs-docs-neat` |
 
 完整的操作手册、退出条件、和其他工作流的关系,各子技能里讲。
 
@@ -74,7 +87,7 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 
 ## feature 和 issue 的阶段不可跳
 
-feature 走 brainstorm(可选) → design → implement → acceptance,issue 走 report → analyze → fix。每个阶段有退出条件,上一个没满足,下一个不开始。
+feature 走 brainstorm(可选) → design → design-review → implement → code-review → QA → acceptance,issue 走 report → analyze → fix。每个阶段有退出条件,上一个没满足,下一个不开始。
 
 AI 最常见的问题是一口气铺几百行代码才让人看——等发现问题已经很难中止。阶段间的人工 checkpoint 就是为了早一步中止。每个 checkpoint 具体检查什么,对应子技能里讲。
 
