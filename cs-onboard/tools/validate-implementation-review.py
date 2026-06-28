@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Gate CodeStable implementation handoffs.
-
-Implementation diffs should run in a linked worktree. Completed CodeStable
-implementation units should carry subagent code-review evidence ({slug}-review.md)
-before the agent reports done.
-"""
+"""Gate CodeStable implementation review evidence."""
 
 from __future__ import annotations
 
@@ -60,7 +55,6 @@ IMPLEMENTATION_SUFFIXES = (
     ".vue",
 )
 
-MAIN_CHECKOUT_OVERRIDE_ENV = "CODESTABLE_ALLOW_MAIN_CHECKOUT_IMPLEMENTATION"
 SELF_REVIEW_FALLBACK_ENV = "CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK"
 UNIT_ROOTS = ("features", "issues", "refactors")
 
@@ -112,21 +106,6 @@ def is_implementation_path(path: str) -> bool:
     return path.startswith(IMPLEMENTATION_PREFIXES) or path.endswith(IMPLEMENTATION_SUFFIXES)
 
 
-def is_linked_worktree(root: Path) -> bool:
-    superproject = run_git(root, "rev-parse", "--show-superproject-working-tree")
-    in_submodule = superproject.returncode == 0 and bool(superproject.stdout.strip())
-
-    git_dir = run_git(root, "rev-parse", "--path-format=absolute", "--git-dir")
-    common_dir = run_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    if git_dir.returncode == 0 and common_dir.returncode == 0:
-        git_dir_path = Path(git_dir.stdout.strip()).resolve()
-        common_dir_path = Path(common_dir.stdout.strip()).resolve()
-        if git_dir_path != common_dir_path and not in_submodule:
-            return True
-
-    return False
-
-
 def unit_dir_for(path: str) -> Path | None:
     parts = Path(path).parts
     if len(parts) < 3 or parts[0] != ".codestable" or parts[1] not in UNIT_ROOTS:
@@ -135,8 +114,24 @@ def unit_dir_for(path: str) -> Path | None:
 
 
 def review_file_for(unit_dir: Path) -> Path:
+    return review_file_candidates_for(unit_dir)[0]
+
+
+def review_file_candidates_for(unit_dir: Path) -> list[Path]:
     slug = unit_dir.name.split("-", 3)[-1]
-    return unit_dir / f"{slug}-review.md"
+    if len(unit_dir.parts) >= 2 and unit_dir.parts[1] == "issues":
+        return [
+            unit_dir / f"{slug}-code-review.md",
+            unit_dir / f"{slug}-review.md",
+        ]
+    return [unit_dir / f"{slug}-review.md"]
+
+
+def existing_review_file_for(root: Path, unit_dir: Path) -> Path | None:
+    for candidate in review_file_candidates_for(unit_dir):
+        if (root / candidate).exists():
+            return candidate
+    return None
 
 
 def all_checklist_steps_done(path: Path) -> bool:
@@ -207,38 +202,25 @@ def validate(root: Path) -> tuple[bool, list[Finding], dict[str, object]]:
     touched_units = sorted(find_touched_units(changed), key=lambda path: path.as_posix())
     findings: list[Finding] = []
 
-    allow_main_checkout = os.environ.get(MAIN_CHECKOUT_OVERRIDE_ENV) == "1"
     allow_self_review = os.environ.get(SELF_REVIEW_FALLBACK_ENV) == "1"
-    linked_worktree = is_linked_worktree(root)
-    if implementation_changes and not allow_main_checkout and not linked_worktree:
-        findings.append(
-            Finding(
-                severity="P1",
-                message=(
-                    "Implementation changes are present outside a linked worktree. "
-                    "Create/switch to an execution worktree, or set "
-                    f"{MAIN_CHECKOUT_OVERRIDE_ENV}=1 for an explicit override."
-                ),
-            )
-        )
 
     missing_review: list[str] = []
     non_subagent_review: list[str] = []
     for unit_dir in touched_units:
         if not unit_needs_review(root, unit_dir):
             continue
-        review_path = root / review_file_for(unit_dir)
-        if not review_path.exists():
+        review_path = existing_review_file_for(root, unit_dir)
+        if review_path is None:
             missing_review.append(review_file_for(unit_dir).as_posix())
-        elif not allow_self_review and not review_has_subagent_evidence(review_path):
-            non_subagent_review.append(review_file_for(unit_dir).as_posix())
+        elif not allow_self_review and not review_has_subagent_evidence(root / review_path):
+            non_subagent_review.append(review_path.as_posix())
 
     if implementation_changes:
         for path in missing_review:
             findings.append(
                 Finding(
                     severity="P1",
-                    message="Completed CodeStable implementation unit is missing code review evidence ({slug}-review.md).",
+                    message="Completed CodeStable implementation unit is missing code review evidence.",
                     path=path,
                 )
             )
@@ -258,8 +240,6 @@ def validate(root: Path) -> tuple[bool, list[Finding], dict[str, object]]:
         "changed_files": [item.path for item in changed],
         "implementation_changes": implementation_changes,
         "touched_units": [path.as_posix() for path in touched_units],
-        "linked_worktree": linked_worktree,
-        "allow_main_checkout": allow_main_checkout,
         "allow_self_review_fallback": allow_self_review,
     }
     return not findings, findings, meta

@@ -154,7 +154,7 @@ command.
 Loop while `state: active`:
 
 1. Choose the smallest useful next attempt from `state.yaml`.
-2. Implement using existing CodeStable constraints, including worktree, review,
+2. Implement using existing CodeStable constraints, including review evidence,
    spec-governance, and commit rules when they apply.
 3. Verify with fresh commands or evidence.
 4. Before changing `state.yaml.current_iteration`, derive the next zero-padded

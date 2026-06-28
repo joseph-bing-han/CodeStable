@@ -20,7 +20,6 @@ def load_tool(module_name: str, filename: str):
 
 
 doctor = load_tool("codestable_doctor", "codestable-doctor.py")
-worktree_gate = load_tool("codestable_worktree_gate", "codestable-worktree-gate.py")
 
 
 def run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -76,16 +75,16 @@ def test_docs_only_dirty_state_is_planning_safe(tmp_path: Path) -> None:
     assert report["implementation_changes"] == []
 
 
-def test_dirty_implementation_on_main_is_blocked(tmp_path: Path) -> None:
+def test_dirty_implementation_reports_active_state(tmp_path: Path) -> None:
     repo = init_repo(tmp_path)
     (repo / "src").mkdir()
     (repo / "src/app.py").write_text("print('x')\n", encoding="utf-8")
 
     report = doctor.diagnose(repo)
 
-    assert report["status"] == "blocked"
+    assert report["status"] == "implementation-active"
     assert report["implementation_changes"] == ["src/app.py"]
-    assert "outside a linked execution worktree" in report["findings"][0]["message"]
+    assert report["findings"] == []
 
 
 def test_completed_unit_without_review_is_blocked(tmp_path: Path) -> None:
@@ -122,27 +121,3 @@ def test_backlog_terms_are_reported_with_line_numbers(tmp_path: Path) -> None:
     assert {"attention-candidate", "needs-human-review", "human-review", "follow-up", "accepted-p2"} <= kinds
     assert all(item["line"] >= 1 for item in report["backlog"])
 
-
-def test_clean_main_with_post_baseline_implementation_commit_is_blocked(tmp_path: Path) -> None:
-    repo = init_repo(tmp_path)
-    unit = make_feature_unit(repo)
-    (unit / "worktree-override.md").write_text(
-        "reason: test\nscope: demo\napproval: approved\n",
-        encoding="utf-8",
-    )
-    payload = worktree_gate.start_gate(repo, ".codestable/features/2026-06-03-demo")
-    assert payload["ok"]
-    assert run(repo, "status", "--porcelain").stdout == "?? .codestable/\n"
-
-    run(repo, "add", ".codestable")
-    run(repo, "commit", "-m", "add unit")
-    (repo / "src").mkdir()
-    (repo / "src/app.py").write_text("print('x')\n", encoding="utf-8")
-    run(repo, "add", "src/app.py")
-    run(repo, "commit", "-m", "implement on main")
-    assert run(repo, "status", "--porcelain").stdout == ""
-
-    report = doctor.diagnose(repo)
-
-    assert report["status"] == "blocked"
-    assert report["post_baseline_blocks"][0]["implementation_changes"] == ["src/app.py"]

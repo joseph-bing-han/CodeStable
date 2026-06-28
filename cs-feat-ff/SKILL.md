@@ -1,6 +1,6 @@
 ---
 name: cs-feat-ff
-description: feature 流程的超轻量通道——不写 design / checklist 直接动手，但先指引 AI 查 CodeStable 知识库再开工。触发：用户说"快速模式"、"fastforward"、"别那么多步骤"、"直接开干"，且需求小到不值得走 design 流程。
+description: feature 流程的超轻量通道——不写 design / checklist 直接动手，但先指引 AI 查 CodeStable 知识库再开工，完成后仍进入 `cs-code-review`。触发：用户说"快速模式"、"fastforward"、"别那么多步骤"、"直接开干"，且需求小到不值得走 design 流程。
 ---
 
 # cs-feat-ff
@@ -10,6 +10,14 @@ description: feature 流程的超轻量通道——不写 design / checklist 直
 开始任何判断或动作前，先读取 `.codestable/attention.md`；缺失则视为骨架不完整，提示先补齐或运行 `cs-onboard`，不要回退到外部 AI 入口文件。
 
 用户让你做小功能时本来 AI 就会直接动手——这个技能**不改变这件事**。它只做一件事：动手前把项目里已沉淀的 CodeStable 知识指给你，按需搜一下，写出来的代码就比裸写多一层保护；动手后回写一份**最简的 `{slug}-ff-note.md`** 让这次工作可追溯、可被 cs-req / cs-domain backfill 看到、能纳入 scoped-commit 提交。
+
+## Task 接入
+
+- 等级：`auto`（重要变更）。本 skill 在首次修改代码或写 `{slug}-ff-note.md` 前，必须先创建或复用 Task List。
+- 动手前的知识检索可先不更新任务；但确定本次进入 fastforward 实现后，首次代码 / 配置改动前必须已有 Task List。之后每次实际改动、验证记录或 ff-note 落盘，都先更新 Task List 的步骤状态和 CodeStable 文档索引。
+- fastforward 代码完成、用户确认效果 OK、`{slug}-ff-note.md` 落盘后，自动把 Task List 的 `owner_skill` 切到 `cs-code-review`；review 通过后将 Task List 标记 `completed` 并立即进入 `cs-task archive`；退出条件以 active 中无同名残留为准。
+- **无 Task 不动手**：启动时先检查是否已有匹配的 active Task。没有就立即 `cs-task create`；存在但 `owner_skill` 不是当前阶段就更新为 `cs-feat-ff`。完成前不得把 Task 创建推迟到最终报告。
+- 来自 `cs` 根入口的明确改法、参考项目、迁移目标或文件清单，不等于允许跳过 Task List；它们只作为 ff-note 和验证清单的输入。
 
 很轻：没有 design doc / checklist / 验收清单 / 动手前的用户确认。看完指引，该读代码读、该写代码写、写完回写一段话。
 
@@ -42,25 +50,11 @@ Glob `.codestable/` 发现可用目录和文档，按需取用：
 
 ---
 
-## 执行 gate（worktree + commit）
+## 实现门禁（Task + review evidence）
 
-fastforward 直接改项目源码且是快速通道末端，两道 gate 仍要走。slug 未定时先按动作敲定（见下文"自动生成 slug"），unit 路径用 `.codestable/features/YYYY-MM-DD-{slug}`。
+fastforward 直接改项目源码且是快速通道末端，仍必须先创建 / 复用 active Task。slug 未定时先按动作敲定（见下文"自动生成 slug"），unit 路径用 `.codestable/features/YYYY-MM-DD-{slug}`。
 
-动手前运行 start gate：
-
-```bash
-python3 .codestable/tools/codestable-worktree-gate.py --root . --json start --unit .codestable/features/YYYY-MM-DD-{slug}
-```
-
-gate 不通过就不要开始改代码；用户批准 override 时先在 unit 目录写 `worktree-override.md`（reason / scope / approval）。
-
-ff-note 落盘、收尾提交前运行 commit gate：
-
-```bash
-python3 .codestable/tools/codestable-worktree-gate.py --root . --json commit --unit .codestable/features/YYYY-MM-DD-{slug}
-```
-
-gate 不通过就先处理 findings，不把"验证已过"当成完成。gate 工具的安装与 branch-guard hook 说明见 `.codestable/reference/branch-guard-hooks.md`。
+动手前确认 Task 已登记、范围已对齐、验证命令已明确。ff-note 落盘后不能只汇报“验证已过”：必须进入 `cs-code-review`，review 通过后才能归档 Task。
 
 ---
 
@@ -161,7 +155,7 @@ tags: [...]
 
 **写得真的轻**：每节就那么几行，不要把它写成迷你 design / 迷你 acceptance。这份文档的目标是"半年后有人看 git log 能跳进来 30 秒搞清楚做了啥"，不是替代标准流程。
 
-落盘后告诉用户："已写 `{slug}-ff-note.md`，本次 fastforward 闭环。"
+落盘后立即进入 `cs-code-review`；review 通过后本次 fastforward 才闭环。不能只告诉用户“下一步进入”。
 
 ---
 
@@ -182,7 +176,7 @@ tags: [...]
 - 要打破 `.codestable/requirements/adrs/` 既定的模块边界 ADR
 - 用户追加的要求让范围翻倍
 
-切回方式：触发 `cs-feat-design`。已写的代码在 design 里标"已部分实现"即可。
+切回方式：自动进入 `cs-feat-design`。已写的代码在 design 里标"已部分实现"即可。
 
 ---
 
@@ -191,6 +185,7 @@ tags: [...]
 - [ ] 代码写完且用户确认效果 OK
 - [ ] `{slug}-ff-note.md` 已落盘且四节填齐（顺手发现可省）
 - [ ] 没有未对齐的"顺手发现"（都进 ff-note 末节，留给后续）
+- [ ] 已自动进入 `cs-code-review`，或 review 已通过
 
 ---
 
@@ -198,8 +193,8 @@ tags: [...]
 
 按 `.codestable/reference/shared-conventions.md` 第 4 节"scoped-commit"规则执行。本通道：
 
-- **提交范围**：本次代码改动 + `{slug}-ff-note.md`
-- ff-note 落盘后告诉用户"已就绪，是否代为 commit？"，用户明确同意才执行
+- **提交范围**：本次代码改动 + `{slug}-ff-note.md` + `{slug}-code-review.md`
+- ff-note 落盘后立即进入 `cs-code-review`；review 通过后再确认是否代为 commit
 
 收尾 commit 前先进入 `cs-code-review` 做一轮独立 diff 评审，Critical / Important 未清零不进 commit；scoped-commit 发起权归 `cs-code-review`。
 

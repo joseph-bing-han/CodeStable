@@ -70,7 +70,7 @@ CodeStable goes the **other way**:
 <tr><th></th><th>Agent-orchestration camp</th><th>CodeStable</th></tr>
 <tr><td><b>Core entity</b></td><td>Agent / Role / Team</td><td>Requirement / Architecture / Feature / Issue / Decision</td></tr>
 <tr><td><b>Main question</b></td><td>How do agents divide work, hand off, coordinate?</td><td>How do requirements, constraints, decisions get recorded, retrieved, reused?</td></tr>
-<tr><td><b>Where state lives</b></td><td>Agent sessions / message buses / queues</td><td>The <code>codestable/</code> file tree in your project (readable by both humans and AI)</td></tr>
+<tr><td><b>Where state lives</b></td><td>Agent sessions / message buses / queues</td><td>The <code>.codestable/</code> file tree in your project (readable by both humans and AI)</td></tr>
 <tr><td><b>Pain it solves</b></td><td>One agent isn't enough; need coordination to scale</td><td>Software complexity overflows context; tacit knowledge gets lost; requirements drift</td></tr>
 <tr><td><b>Role of humans</b></td><td>The less the better — full automation is the ideal</td><td>Human-in-the-loop — the programmer owns the whole; AI is an efficient executor</td></tr>
 </table>
@@ -114,15 +114,13 @@ CodeStable models real coding work as a set of **entities** and **flows**.
 
 `cs-code-review` is the cross-cutting quality gate at the tail of every execution flow, before commit — feature, fast path, issue fixing, and refactoring all route their pre-commit diff review through it. At a phase or milestone boundary, use `cs-docs-neat` to reconcile `.codestable/`, README/docs, `CLAUDE.md` / `AGENTS.md`, and agent memory so docs do not drift from code.
 
-> Strong branch protection: `cs-onboard` can optionally release the `codestable-ai-branch-guard` hook, which blocks AI from implementing directly on `main`/`master` and forces a worktree. See the "branch protection hook" section in `cs-onboard`.
-
 ---
 
 ## Skill catalog
 
 <table>
 <tr><th>Group</th><th>Skill</th><th>Purpose</th></tr>
-<tr><td><b>Root entry</b></td><td><code>cs</code></td><td>Unified entry — introduces the system and routes open-ended intents to the right cs-* skill. Call it when you don't know which one fits</td></tr>
+<tr><td><b>Root entry</b></td><td><code>cs</code></td><td>Unified entry for first routing; direct entry into other lanes must still deliver the same full workflow closure</td></tr>
 <tr><td><b>Onboard</b></td><td><code>cs-onboard</code></td><td>Bring CodeStable into a new repo or one with scattered docs</td></tr>
 <tr><td rowspan="2"><b>Requirement & domain</b></td><td><code>cs-req</code></td><td>Curate / accumulate capability vision docs</td></tr>
 <tr><td><code>cs-domain</code></td><td>Maintain <code>requirements/CONTEXT.md</code> glossary + <code>requirements/adrs/</code> architecture decisions (3-criteria gate + Nygard 4 sections) + single/multi context topology</td></tr>
@@ -171,7 +169,7 @@ CodeStable's skills are **layered + event-driven**: root routing, onboard, long-
 ═══════════════════════════════════════════════════════════════════════
  Phase 0 · Onboard                            (runs once per project)
 ───────────────────────────────────────────────────────────────────────
-   cs-onboard ──▶ Generate codestable/ skeleton + release reference/, tools/
+   cs-onboard ──▶ Generate .codestable/ skeleton + release reference/, tools/
 ═══════════════════════════════════════════════════════════════════════
                               │
                               ▼
@@ -188,7 +186,7 @@ CodeStable's skills are **layered + event-driven**: root routing, onboard, long-
 ═══════════════════════════════════════════════════════════════════════
  Layer 2 · Planning ("how we plan to deliver this big thing next")
 ───────────────────────────────────────────────────────────────────────
-   cs-roadmap ──▶ codestable/roadmap/{slug}/
+   cs-roadmap ──▶ .codestable/roadmap/{slug}/
                   Turn "I want X" into a complete up-front plan:
                     ① High-level design — module / component split
                     ② Architectural detail — interface contracts
@@ -319,7 +317,7 @@ your-project/
 
 > A skill is an independent install unit. At runtime, **each skill can only see files inside its own package**. References like `B-skill/reference/xxx.md` written in skill A's SKILL.md are **simply unreachable** at runtime.
 >
-> Cross-skill shared references must go through the "working project" layer: `cs-onboard` copies them from the skill package to the project's `codestable/reference/`, and other skills read them via the project-relative path.
+> Cross-skill shared references must go through the "working project" layer: `cs-onboard` copies them from the skill package to the project's `.codestable/reference/`, and other skills read them via the project-relative path.
 
 To change shared conventions, edit the templates under `cs-onboard/reference/`; new projects pick them up at onboard time. See [WORKFLOW.en.md](./WORKFLOW.en.md) for the full directory model and cross-skill reference constraints.
 

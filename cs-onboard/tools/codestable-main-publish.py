@@ -2,8 +2,7 @@
 """Create an auditable owner-intent window for publishing protected main.
 
 This tool does not merge by itself. It creates a short-lived intent file that
-the branch guard can recognize while an owner-authorized main publish is in
-progress.
+records owner authorization while a main publish is in progress.
 """
 
 from __future__ import annotations

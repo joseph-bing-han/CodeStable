@@ -55,7 +55,7 @@ description: roadmap 人工确认前的规划审查 gate。对照 roadmap 主文
 
 但一旦本轮已经启动 independent reviewer，它就是本轮 review gate 的输入。主 agent 可以先做本地审查草稿，但不能在 independent reviewer 返回前定稿 `{slug}-roadmap-review.md`、不能给出 `passed`、不能把 roadmap 交给用户确认。reviewer 卡住、失败、权限阻塞或耗时过长时，只能把本轮标成 `blocked` / `independent-review-pending`，让用户决定继续等待、重试 reviewer，或明确降级为 local-only review。
 
-先运行本 skill 自带检测脚本。按已加载的 `SKILL.md` 所在目录解析脚本路径，不要按业务仓库根目录猜路径：
+先运行本 skill 自带检测脚本。必须在 Shell tool 中把 `working_directory` 设置为已加载的 `SKILL.md` 所在目录（例如 `.../cs-roadmap-review`），不要在业务仓库根目录运行，也不要按业务仓库根目录拼 `scripts/`：
 
 ```bash
 python3 scripts/detect-review-agent.py --pretty

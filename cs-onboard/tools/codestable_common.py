@@ -3,12 +3,10 @@
 
 from __future__ import annotations
 
-import json
+import os
 import re
 import subprocess
-import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -57,6 +55,8 @@ IMPLEMENTATION_SUFFIXES = (
 
 UNIT_ROOTS = ("features", "issues", "refactors")
 IMPLEMENTATION_UNIT_ROOTS = frozenset(UNIT_ROOTS)
+TASK_ROOT = Path(".codestable/tasks")
+SELF_REVIEW_FALLBACK_ENV = "CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK"
 KNOWN_SKILL_DIRS = {
     "browser-bridge",
     "codestable-maintainer",
@@ -193,21 +193,6 @@ def default_branch(root: Path) -> str | None:
     return current_branch(root)
 
 
-def is_linked_worktree(root: Path) -> bool:
-    superproject = run_git(root, "rev-parse", "--show-superproject-working-tree")
-    in_submodule = superproject.returncode == 0 and bool(superproject.stdout.strip())
-
-    git_dir = run_git(root, "rev-parse", "--path-format=absolute", "--git-dir")
-    common_dir = run_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    if git_dir.returncode == 0 and common_dir.returncode == 0:
-        git_dir_path = Path(git_dir.stdout.strip()).resolve()
-        common_dir_path = Path(common_dir.stdout.strip()).resolve()
-        if git_dir_path != common_dir_path and not in_submodule:
-            return True
-
-    return False
-
-
 def is_implementation_path(path: str) -> bool:
     if path.startswith(".codestable/"):
         return False
@@ -278,7 +263,37 @@ def unit_slug(unit_dir: Path) -> str:
 
 
 def review_file_for(unit_dir: Path) -> Path:
-    return unit_dir / f"{unit_slug(unit_dir)}-review.md"
+    return review_file_candidates_for(unit_dir)[0]
+
+
+def review_file_candidates_for(unit_dir: Path) -> list[Path]:
+    slug = unit_slug(unit_dir)
+    if len(unit_dir.parts) >= 2 and unit_dir.parts[1] == "issues":
+        return [
+            unit_dir / f"{slug}-code-review.md",
+            unit_dir / f"{slug}-review.md",
+        ]
+    return [unit_dir / f"{slug}-review.md"]
+
+
+def existing_review_file_for(root: Path, unit_dir: Path) -> Path | None:
+    for candidate in review_file_candidates_for(unit_dir):
+        if (root / candidate).exists():
+            return candidate
+    return None
+
+
+def active_task_file_for(unit_dir: Path) -> Path:
+    return TASK_ROOT / "active" / f"{unit_slug(unit_dir)}.md"
+
+
+def task_spine_exists(root: Path, unit_dir: Path) -> bool:
+    slug = unit_slug(unit_dir)
+    active_path = root / active_task_file_for(unit_dir)
+    archived_root = root / TASK_ROOT / "archived"
+    if active_path.exists():
+        return True
+    return archived_root.exists() and any(archived_root.glob(f"*-{slug}.md"))
 
 
 def all_checklist_steps_done(path: Path) -> bool:
@@ -359,27 +374,48 @@ def review_has_subagent_evidence(path: Path) -> bool:
 
 def missing_review_findings(root: Path, units: list[Path]) -> list[Finding]:
     findings: list[Finding] = []
+    allow_self_review = os.environ.get(SELF_REVIEW_FALLBACK_ENV) == "1"
     for unit_dir in units:
         if not unit_needs_review(root, unit_dir):
             continue
-        review_path = review_file_for(unit_dir)
-        full_review_path = root / review_path
-        if not full_review_path.exists():
+        review_path = existing_review_file_for(root, unit_dir)
+        if review_path is None:
+            expected_path = review_file_for(unit_dir)
             findings.append(
                 Finding(
                     severity="P1",
-                    message="Completed CodeStable implementation unit is missing code review evidence ({slug}-review.md).",
-                    path=review_path.as_posix(),
+                    message="Completed CodeStable implementation unit is missing code review evidence.",
+                    path=expected_path.as_posix(),
                 )
             )
-        elif not review_has_subagent_evidence(full_review_path):
+        elif not allow_self_review and not review_has_subagent_evidence(root / review_path):
             findings.append(
                 Finding(
                     severity="P1",
-                    message="CodeStable implementation review must use a subagent reviewer.",
+                    message=(
+                        "CodeStable implementation review must use a subagent reviewer. "
+                        f"Set {SELF_REVIEW_FALLBACK_ENV}=1 only when the platform has no subagent capability."
+                    ),
                     path=review_path.as_posix(),
                 )
             )
+    return findings
+
+
+def missing_task_findings(root: Path, units: list[Path]) -> list[Finding]:
+    findings: list[Finding] = []
+    for unit_dir in units:
+        if not is_implementation_unit(unit_dir):
+            continue
+        if task_spine_exists(root, unit_dir):
+            continue
+        findings.append(
+            Finding(
+                severity="P1",
+                message="CodeStable implementation unit is missing Task spine; run cs-task backfill before review/archive.",
+                path=active_task_file_for(unit_dir).as_posix(),
+            )
+        )
     return findings
 
 
@@ -400,174 +436,6 @@ def resolve_unit(root: Path, value: str) -> Path:
 def is_implementation_unit(unit_dir: Path) -> bool:
     parts = unit_dir.parts
     return len(parts) >= 3 and parts[0] == ".codestable" and parts[1] in IMPLEMENTATION_UNIT_ROOTS
-
-
-def override_file_for(root: Path, unit_dir: Path) -> Path:
-    return root / unit_dir / "worktree-override.md"
-
-
-def has_human_approved_override(root: Path, unit_dir: Path) -> bool:
-    path = override_file_for(root, unit_dir)
-    if not path.exists():
-        return False
-    text = path.read_text(encoding="utf-8").lower()
-    return "reason" in text and "scope" in text and ("approved" in text or "approval" in text)
-
-
-def baseline_id(unit_dir: Path) -> str:
-    return re.sub(r"[^a-zA-Z0-9_.-]+", "_", unit_dir.as_posix()).strip("_")
-
-
-def baseline_path(root: Path, unit_dir: Path) -> Path:
-    result = run_git(root, "rev-parse", "--git-path", f"codestable/worktree-gate/{baseline_id(unit_dir)}.json")
-    if result.returncode == 0 and result.stdout.strip():
-        return (root / result.stdout.strip()).resolve()
-    return root / ".git" / "codestable" / "worktree-gate" / f"{baseline_id(unit_dir)}.json"
-
-
-def write_baseline(root: Path, unit_dir: Path) -> dict[str, object]:
-    branch = current_branch(root)
-    default = default_branch(root)
-    default_ref = default or branch or "HEAD"
-    baseline = {
-        "unit": unit_dir.as_posix(),
-        "default_branch": default,
-        "default_head": ref_head(root, default_ref),
-        "current_branch": branch,
-        "worktree": root.resolve().as_posix(),
-        "linked_worktree": is_linked_worktree(root),
-        "timestamp": int(time.time()),
-    }
-    path = baseline_path(root, unit_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return baseline
-
-
-def read_baseline(root: Path, unit_dir: Path) -> dict[str, object] | None:
-    path = baseline_path(root, unit_dir)
-    if not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def iter_baselines(root: Path) -> list[dict[str, object]]:
-    git_path = run_git(root, "rev-parse", "--git-path", "codestable/worktree-gate")
-    if git_path.returncode != 0 or not git_path.stdout.strip():
-        return []
-    baseline_root = (root / git_path.stdout.strip()).resolve()
-    if not baseline_root.exists():
-        return []
-    baselines: list[dict[str, object]] = []
-    for path in sorted(baseline_root.glob("*.json")):
-        try:
-            baselines.append(json.loads(path.read_text(encoding="utf-8")))
-        except json.JSONDecodeError:
-            continue
-    return baselines
-
-
-def changed_paths_between(root: Path, base_ref: str, head_ref: str) -> list[str]:
-    diff = run_git(root, "diff", "--name-only", f"{base_ref}..{head_ref}")
-    if diff.returncode != 0:
-        return []
-    return [line.strip() for line in diff.stdout.splitlines() if line.strip()]
-
-
-def post_baseline_implementation_changes(root: Path, baseline: dict[str, object]) -> list[str]:
-    default = baseline.get("default_branch")
-    default_head = baseline.get("default_head")
-    if not default or not default_head:
-        return []
-    head = ref_head(root, str(default))
-    if not head or head == default_head:
-        return []
-    return [
-        path
-        for path in changed_paths_between(root, str(default_head), str(default))
-        if is_implementation_path(path)
-    ]
-
-
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def git_common_dir(root: Path) -> Path:
-    result = run_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    if result.returncode == 0 and result.stdout.strip():
-        return Path(result.stdout.strip()).resolve()
-    return (root / ".git").resolve()
-
-
-def inbox_dir(root: Path) -> Path:
-    return git_common_dir(root) / "codestable" / "worktree-inbox"
-
-
-def inbox_record_id(branch: str | None, unit_dir: Path | str | None) -> str:
-    source = branch or (unit_dir.as_posix() if isinstance(unit_dir, Path) else str(unit_dir or "detached"))
-    return re.sub(r"[^a-zA-Z0-9_.-]+", "_", source).strip("_") or "detached"
-
-
-def inbox_record_path(root: Path, branch: str | None, unit_dir: Path | str | None) -> Path:
-    return inbox_dir(root) / f"{inbox_record_id(branch, unit_dir)}.json"
-
-
-def write_inbox_record(root: Path, record: dict[str, object]) -> Path:
-    path = inbox_record_path(root, str(record.get("branch") or ""), str(record.get("unit") or ""))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return path
-
-
-def iter_inbox_records(root: Path) -> list[dict[str, object]]:
-    directory = inbox_dir(root)
-    if not directory.exists():
-        return []
-    records: list[dict[str, object]] = []
-    for path in sorted(directory.glob("*.json")):
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            continue
-        if isinstance(record, dict):
-            record["_record_path"] = path.as_posix()
-            records.append(record)
-    return records
-
-
-def branch_head(root: Path, branch: str) -> str | None:
-    return ref_head(root, branch) or ref_head(root, f"refs/heads/{branch}")
-
-
-def is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
-    return run_git(root, "merge-base", "--is-ancestor", ancestor, descendant).returncode == 0
-
-
-def worktree_map(root: Path) -> dict[str, dict[str, object]]:
-    result = run_git(root, "worktree", "list", "--porcelain")
-    if result.returncode != 0:
-        return {}
-    entries: dict[str, dict[str, object]] = {}
-    current: dict[str, object] = {}
-    for line in result.stdout.splitlines():
-        if not line:
-            if current.get("path"):
-                entries[str(current["path"])] = current
-            current = {}
-            continue
-        key, _, value = line.partition(" ")
-        if key == "worktree":
-            current["path"] = str(Path(value).resolve())
-        elif key == "HEAD":
-            current["head"] = value
-        elif key == "branch":
-            current["branch"] = value.removeprefix("refs/heads/")
-        elif key == "detached":
-            current["detached"] = True
-    if current.get("path"):
-        entries[str(current["path"])] = current
-    return entries
 
 
 BACKLOG_PATTERNS = (

@@ -1,6 +1,6 @@
 ---
 name: cs-code-review
-description: 横切代码审查 gate——任何流程（feature / issue / refactor / fastforward）实现完成后、commit 前，对照对应 spec 产物和当前 git diff 做独立只读 code review，产出 {slug}-review.md；可选检测 Paseo / 外部 agent 并用独立 audit subagent 辅助审查，但最终由本 skill 合并定级。有 blocking findings 时回到对应实现技能修复，通过后交回上游收尾（feature 进 cs-feat-qa，其余进各自验收/提交）。触发：用户说"做代码审查"、"code review"、"review 这次改动"、"合并前审一下"、"跑 cs-code-review"。
+description: 横切代码审查 gate——任何流程（feature / issue / refactor / fastforward）实现完成后、commit 前，对照对应 spec 产物、Task spine 和当前 git diff 做独立只读 code review，产出 {slug}-review.md；可选检测 Paseo / 外部 agent 并用独立 audit subagent 辅助审查，但最终由本 skill 合并定级。有 blocking findings 时回到对应实现技能修复，通过后更新 Task 并自动交回下游（feature 进 cs-feat-qa，其余进入 cs-task archive）。触发：用户说"做代码审查"、"code review"、"review 这次改动"、"合并前审一下"、"跑 cs-code-review"。
 ---
 
 # cs-code-review
@@ -13,6 +13,13 @@ description: 横切代码审查 gate——任何流程（feature / issue / refac
 
 审查目标不是追求完美代码，而是确认本次改动没有降低系统代码健康，并且确实朝对应 spec（design / fix-note / refactor-design / 用户确认范围）的目标前进。能自动格式化或 lint 的问题不要手工阻塞；会影响正确性、维护性、安全、性能、可测试性、需求满足或后续验收可信度的问题必须指出。
 
+## Task 接入
+
+- 等级：`auto-gate`。除 ad-hoc / pre-merge 外，本 skill 必须复用来源 workflow 的 Task spine；查找时必须同时检查 active 与 archived。active 找不到但 archived 中已有同 slug 且 `status: archived` 时，说明该 workflow 已闭环，禁止 backfill 新 active Task，只能按历史归档事实收尾。
+- review 报告落盘前后都要更新 Task：`owner_skill=cs-code-review`、`related_docs` 登记 `{slug}-review.md`、执行步骤记录 review 状态。
+- `status=passed` 后按进入来源更新 Task：feature 标记下一 owner 为 `cs-feat-qa`；issue / feature-ff / refactor / refactor-ff 若无需后续 QA，则标记 `completed` 并**在同一轮直接执行 `cs-task archive` 的归档动作**，直到 active 中无同名残留才允许回复用户。不能只写“已进入 / 下一步进入 / 建议进入 cs-task archive”。
+- 没有 review 报告、review `status` 非 passed、或 independent reviewer 仍 pending 时，Task 只能保持 `active` / `blocked`，不能 completed / archived。
+
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md` 第 0 节。
 > 报告语言：code review 报告正文默认用**中文**（见 `.codestable/attention.md` 报告语言节）；frontmatter / yaml 字段不翻译。
 
@@ -22,9 +29,9 @@ description: 横切代码审查 gate——任何流程（feature / issue / refac
 |---|---|---|---|
 | `cs-feat-impl`（标准 feature） | impl 完成、QA 前 | design + checklist | `cs-feat-qa` |
 | `cs-feat-ff`（feature 快速通道） | ff-note 落盘、commit 前 | ff-note + 用户原始需求 | 收尾提交 |
-| `cs-issue-fix` | fix-note 落盘、commit 前 | report + analysis + fix-note | 收尾提交 |
-| `cs-refactor` | apply-notes 完成、commit 前 | scan + refactor-design + checklist | 收尾提交 |
-| `cs-refactor-ff` | 自证通过、commit 前 | 用户确认的重构范围 + 验证命令 | 收尾提交 |
+| `cs-issue-fix` | fix-note 落盘、commit 前 | report + analysis + fix-note | 标记 completed 并立即执行 `cs-task archive` |
+| `cs-refactor` | apply-notes 完成、commit 前 | scan + refactor-design + checklist | 标记 completed 并立即执行 `cs-task archive` |
+| `cs-refactor-ff` | 自证通过、commit 前 | 用户确认的重构范围 + 验证命令 | 标记 completed 并立即执行 `cs-task archive` |
 | ad-hoc / pre-merge | 用户要求 | 用户指定范围 / git range | 给结论 |
 
 **不是 `cs-audit`**：audit 主动扫一片代码找潜在问题；code review 只审当前变更范围。
@@ -52,6 +59,7 @@ description: 横切代码审查 gate——任何流程（feature / issue / refac
 
 先按「进入来源」表确认本轮来源，再做对应前置校验：
 
+0. **Task spine 存在**——除 ad-hoc / pre-merge 外，必须先找匹配 active Task，再找 archived 中同 slug 且 `status: archived` 的历史 Task。active 与 archived 都缺失时才 backfill：根据来源 unit、已有 spec 产物和当前 diff 创建 / 复用 Task，并把 `owner_skill` 设为 `cs-code-review`；如果 archived 已存在且已归档，不得为了 review / 总结 / 收尾再创建新的 active Task。
 1. 来源的 spec 产物存在且已定稿——feature 看 `{slug}-design.md`（`doc_type=feature-design`、`status=approved`、`feature` 与目录一致）+ `{slug}-checklist.yaml`（`steps` 全 `done`）；issue 看 report+analysis+fix-note；refactor 看 scan+refactor-design+checklist；ff / ad-hoc 看用户确认范围。缺定稿 spec 时退回对应实现技能，不硬审。
 2. 当前 diff 能看到本轮实现改动；完全没有代码或产物改动时退回来源实现技能。
 3. 如果已有 `{slug}-review.md`：
@@ -65,9 +73,13 @@ description: 横切代码审查 gate——任何流程（feature / issue / refac
 
 本阶段默认由当前 agent 完成本地 review；独立 reviewer 是增强项，不是硬依赖。检测不到外部 agent、Paseo 不可用、provider 未配置或用户明确要求快速完成时，可以继续本地 review，并在报告里记录 `Independent reviewer: local-only` / `skipped-by-user`。
 
+### Cursor subagent 使用原则
+
+在 Cursor 内启动独立 code review subagent 时，只能使用当前 runtime 已经暴露、可直接调用的通用审查型 subagent。若 runtime 允许当轮指定模型或思考预算，只能使用 owner 当轮明确指定的参数；否则继承当前对话模型与思考等级。禁止改用 Explore subagent、快速浏览预设或低思考默认值作为兜底。
+
 但一旦本轮已经启动 independent reviewer，它就成为本轮 review gate 的输入。主 agent 可以先做本地审查草稿，但不能在 independent reviewer 返回前定稿 `{slug}-review.md`、不能给出 `passed`、不能进入通过后去向。如果 reviewer 卡住、失败、权限阻塞或耗时过长，只能把本轮标成 `blocked` / `independent-review-pending`，然后让用户决定：继续等待、重试 reviewer，或明确降级为 local-only review。
 
-先运行本 skill 自带检测脚本。按已加载的 `SKILL.md` 所在目录解析脚本路径，不要按业务仓库根目录猜路径：
+先运行本 skill 自带检测脚本。必须在 Shell tool 中把 `working_directory` 设置为已加载的 `SKILL.md` 所在目录（例如 `.../cs-code-review`），不要在业务仓库根目录运行，也不要按业务仓库根目录拼 `scripts/`：
 
 ```bash
 python3 scripts/detect-review-agent.py --pretty
@@ -77,9 +89,10 @@ python3 scripts/detect-review-agent.py --pretty
 
 优先级：
 
-1. **Paseo 可用**：优先用 Paseo 启动 `audit` 类 subagent 做只读独立审查。检测脚本只能说明本机存在 Paseo 候选能力；真正启动前还要确认当前 agent runtime 暴露 Paseo 工具，或可调用检测结果里的 Paseo CLI。启动前先加载 / 读取 `paseo` skill 的当前说明，并遵守它的规则：读取 `~/.paseo/orchestration-preferences.json`，使用 `providers.audit`，不要硬编码 Claude 或 Codex；文件缺失时用合理默认并在报告里说明。没有可用工具 / CLI 时不要伪装启动，记录 `local-only` 或 `blocked` 原因。不要无限轮询运行中的 agent；如果 reviewer 已启动但结果未返回，停止在 review gate，记录 pending/blocked，等待通知或用户决定。
-2. **只有 claude / gemini / aider 等 CLI 可见**：不要自动调用。直接本地 review，除非用户显式要求使用某个 CLI。
-3. **没有外部 reviewer**：本地 review。
+1. **Cursor subagent 可用**：优先用当前 runtime 可直接调用的通用审查型 subagent 做只读独立审查。若 runtime 无法直接提供此类 subagent，记录 `local-only` 或 `blocked` 原因。不得使用 Explore subagent 或 Explore subagent model 预设。
+2. **Paseo 可用**：可用 Paseo 启动 `audit` 类 subagent 做只读独立审查。检测脚本只能说明本机存在 Paseo 候选能力；真正启动前还要确认当前 agent runtime 暴露 Paseo 工具，或可调用检测结果里的 Paseo CLI。启动前先加载 / 读取 `paseo` skill 的当前说明，并遵守它的规则：读取 `~/.paseo/orchestration-preferences.json`，使用 `providers.audit`，不要硬编码 Claude 或 Codex；文件缺失时用合理默认并在报告里说明。没有可用工具 / CLI 时不要伪装启动，记录 `local-only` 或 `blocked` 原因。不要无限轮询运行中的 agent；如果 reviewer 已启动但结果未返回，停止在 review gate，记录 pending/blocked，等待通知或用户决定。
+3. **只有 claude / gemini / aider 等 CLI 可见**：不要自动调用。直接本地 review，除非用户显式要求使用某个 CLI。
+4. **没有外部 reviewer**：本地 review。
 
 Paseo subagent prompt 必须只给原始材料和边界，不透露本地 review 结论：
 
@@ -152,10 +165,10 @@ Paseo subagent prompt 必须只给原始材料和边界，不透露本地 review
 - `changes-requested`：有 blocking，或 important 多到会影响验收可信度。
 - `blocked`：缺少关键输入、diff 归因无法判断、设计/实现状态不满足 review 前置条件，或本轮已启动 independent reviewer 但结果仍 pending / failed / blocked 且用户尚未确认降级。
 
-**`reviewer` 字段（gate 锚点）**：`{slug}-review.md` 的 frontmatter `reviewer` 决定下游 worktree / commit / finish gate 是否放行，按「独立 reviewer 增强项」实际三态写：
+**`reviewer` 字段（gate 锚点）**：`{slug}-review.md` 的 frontmatter `reviewer` 决定下游 review evidence gate 是否放行，按「独立 reviewer 增强项」实际三态写：
 
 - independent reviewer completed 并已合并核验 → `reviewer: subagent`。
-- 没启动外部 reviewer（local-only / skipped-by-user）→ `reviewer: self`；gate 默认要求 `subagent`，`self` 需配 `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` 才放行。
+- 没启动外部 reviewer（local-only / skipped-by-user）→ `reviewer: self`；review evidence gate 默认要求 `subagent`，`self` 需配 `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` 才放行。
 - pending / failed / blocked → 不定稿 `passed`，也不写 `reviewer: subagent`。
 
 ---
@@ -200,7 +213,7 @@ Paseo subagent prompt 必须只给原始材料和边界，不透露本地 review
 如果没有 blocking，且 important 已处理或被明确接受：
 
 - 报告 `status: passed`。
-- 告诉用户下一步是「进入来源」表的通过后去向（feature→`cs-feat-qa`）。
+- 立即按「进入来源」表续跑：feature→`cs-feat-qa`；issue / ff / refactor 若无后续 QA，则更新 Task 为 `completed` 并执行 `cs-task archive` 的实际移动、frontmatter 更新和 active 残留清理。不能只告诉用户下一步。
 
 ---
 
@@ -214,9 +227,10 @@ Paseo subagent prompt 必须只给原始材料和边界，不透露本地 review
 - [ ] 已做整体审查和行级审查。
 - [ ] 已明确区分 blocking / important / nit / suggestion / learning / praise / residual-risk。
 - [ ] 已写来源 spec 目录下的 `{slug}-review.md`（feature 即 `.codestable/features/{feature}/{slug}-review.md`）。
+- [ ] 除 ad-hoc / pre-merge 外，active Task 已登记 review 报告并按 verdict 更新 owner / status。
 - [ ] `status: passed` 时 frontmatter `reviewer` 已按独立 review 实际写 `subagent`（或确属无 subagent 平台的 `self` fallback）——这是下游 gate 的放行锚点。
 - [ ] 有 blocking 时没有进入下游，而是指向来源实现技能的 review-fix。
-- [ ] 无 blocking 时明确告诉用户「进入来源」表的通过后去向（feature→`cs-feat-qa`）。
+- [ ] 无 blocking 时已实际续跑「进入来源」表的通过后去向（feature→`cs-feat-qa`；issue / ff / refactor→`cs-task archive`）。
 
 ---
 

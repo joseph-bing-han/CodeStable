@@ -1,6 +1,6 @@
 ---
 name: cs-roadmap
-description: 把"大到塞不进单个 feature"的需求做成完整事前规划：概设 + 接口契约 + 子 feature 拆解清单，放在 `.codestable/roadmap/{slug}/`。两种模式 new / update。触发：用户说"我想要一个 X 系统"、"帮我把这块需求拆一下"、"开一份 roadmap"，或 feature-design 阶段发现需求太大。
+description: 把"大到塞不进单个 feature"的需求做成完整事前规划：概设 + 接口契约 + 子 feature 拆解清单，放在 `.codestable/roadmap/{slug}/`。两种模式 new / update；用户选择继续时自动接到最小闭环 feature 主线。触发：用户说"我想要一个 X 系统"、"帮我把这块需求拆一下"、"开一份 roadmap"，或 feature-design 阶段发现需求太大。
 ---
 
 # cs-roadmap
@@ -29,12 +29,20 @@ description: 把"大到塞不进单个 feature"的需求做成完整事前规划
 
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md`。主文档和 items 完整模板看同目录 `reference.md`。
 
+## Task 接入
+
+- 等级：`auto`（重要变更）。本 skill 在首次创建或更新 `.codestable/roadmap/{slug}/` 主文档、`items.yaml` 或 `drafts/` 前，必须先创建或复用 Task List。
+- `new` / `update` 模式下，每次 roadmap 主文档落盘、`items.yaml` 变更、依赖重排或观察项补记后，先更新 Task List 的步骤状态和 CodeStable 文档索引，再继续原流程。
+- roadmap 用户 review 通过且文件全部落盘后，将 Task List 标记 `completed` 并立即进入 `cs-task archive`；退出条件以 active 中无同名残留为准。
+- 如果用户在落盘后选择“通过并继续”，roadmap lane 不在本地收口，而是把 handoff 交给第一条 `minimal_loop: true` 的 `cs-feat-design`，后续仍视为同一条完整主线。
+- 用户选择继续后，当前 agent 必须读取并执行目标 feature skill；不能只提示“下一步使用 `cs-feat-design`”。
+
 ---
 
 ## 适用场景
 
 - 用户描述"一眼看出做不完"的大需求（"加权限系统"、"做通知中心"、"接 SSO"）
-- `cs-brainstorm` 判为 case 3 移交过来（brainstorm 只做分诊，不做拆解）
+- `cs-brainstorm` 判为 case 3 自动交接过来（brainstorm 只做分诊，不做拆解）
 - 已有 roadmap 加新子 feature / 改依赖 / 调顺序 / 标废弃
 - feature-design 发现要做的事实际是多个 feature 集合，先退回拆
 
@@ -49,7 +57,7 @@ description: 把"大到塞不进单个 feature"的需求做成完整事前规划
 | "拆一下 X 需求"、"开一份 X 的 roadmap"、"我想要一个 X 系统" | `new` |
 | "往 {已有 roadmap} 加子 feature"、"重排顺序"、"标 drop" | `update` |
 
-判断不出问用户。
+判断不出时，用结构化问题让用户选。
 
 ---
 
@@ -245,7 +253,7 @@ feature-design 发现接口契约不合理 / 漏了 / 描述不准 → **回 `cs
 | `cs-feat-accept` 回写方 | acceptance 自动改 items.yaml 为 `done`，本技能只定义格式不负责回写 |
 | `cs-roadmap-impl-goal` 下游 | 用户确认 roadmap 后，可把所有子 feature design 和后续 impl / review / QA / accept 编排成可恢复的 goal |
 | `cs-onboard` 创建者 | 建 `roadmap/` 空目录 |
-| `cs-brainstorm` 上游 | case 3 移交本技能，带"真问题 / 大致范围 / 可能子模块"一句话汇总。本技能不重复分诊直接拆 |
+| `cs-brainstorm` 上游 | case 3 自动交接本技能，带"真问题 / 大致范围 / 可能子模块"一句话汇总。本技能不重复分诊直接拆 |
 
 ---
 

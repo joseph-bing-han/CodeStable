@@ -2,38 +2,35 @@
 
 This file is copied by `cs-onboard` to
 `.codestable/reference/execution-conventions.md`. It owns shared execution,
-worktree, review, finish, and handoff rules.
+review evidence, commit planning, and handoff rules.
 
-## Main Coordination And Worktree Execution
+## Main Coordination And Execution
 
-CodeStable separates discussion / planning from code edits:
+CodeStable separates durable planning from implementation evidence:
 
-- **Main coordination checkout**: where the owner discusses requirements and
-  writes design / analysis / roadmap / checklist, usually the `main` checkout.
-- **Execution worktree**: where code changes happen. Each feature / issue /
-  refactor uses its own git worktree and a typed branch (`feat/{slug}` / `fix/{slug}` / `refactor/{slug}`) unless the owner
-  explicitly approves direct edits in the current checkout.
+- **Planning surface**: durable `.codestable/` artifacts that record design,
+  analysis, checklist, approval, review, QA, and acceptance evidence.
+- **Implementation surface**: the current checkout where code changes happen.
+  CodeStable does not require a dedicated checkout topology; it requires Task
+  spine, scoped changes, validation evidence, and review evidence.
 
 Goal work may use `.codestable/goals/YYYY-MM-DD-{slug}` as the wrapper unit, but
-code edits still obey the feature / issue / refactor worktree rules when those
+code edits still follow the child feature / issue / refactor flow when those
 flows apply.
 
 ## Short Correct Usage
 
 1. Start: `cs {goal}`. The agent routes to feature / issue / refactor / explore
    / goal.
-2. Implement: `开 worktree 实现`. The agent starts in an execution worktree and
-   runs the start gate.
+2. Implement: the agent confirms Task + spec state, then applies the approved
+   feature / issue / refactor step.
 3. Review: `允许 subagent`. Completed code batches require independent review.
-4. Commit: `提交这批实现`. Run validation, commit planner, and commit gate.
-5. Finish: `finish worktree`. Run finish gate and record merge readiness.
-6. Solidify finish artifacts: commit the generated finish report files.
-7. Merge: only after explicit owner approval.
+4. Commit planning: run validation, review evidence checks, and commit planner.
+5. Merge / deploy: only after explicit owner approval.
 
 ## Shared Planning Surface
 
-Worktrees must not read sibling unmerged code diffs. Shared intent travels
-through:
+Shared intent travels through:
 
 - `.codestable/goals/**`
 - `.codestable/features/**`, `.codestable/issues/**`, `.codestable/refactors/**`
@@ -41,41 +38,35 @@ through:
 - `.codestable/compound/**`
 - owner-designated temporary coordination docs
 
-If an execution worktree discovers the plan must change, sync the plan change
-back through the shared planning surface or stop for owner judgment.
+If implementation discovers the plan must change, sync the plan change back
+through the shared planning surface or stop for owner judgment.
 
-## Before Creating An Execution Worktree
+## Before Implementation
 
 Confirm:
 
-1. whether the current checkout is coordination or execution;
+1. the current Task spine exists and names the correct owner skill;
 2. the spec / checklist / analysis / goal state is readable;
-3. worktree path, branch, scope, and sibling-worktree boundaries are clear;
-4. the worktree starts from the target baseline, not from another feature
-   worktree unless stacked development is explicit.
-
-Run start gate before implementation:
-
-```bash
-python3 .codestable/tools/codestable-worktree-gate.py --root . --json start --unit .codestable/features/YYYY-MM-DD-{slug}
-```
+3. the implementation scope and validation commands are clear;
+4. unrelated dirty files are understood and excluded from the current scope.
 
 For goal-wrapped work, the gate unit should be the child feature / issue /
 refactor unit when one exists. If the goal has no child unit yet, record the
 reason in the goal iteration and follow the lightest applicable execution path.
 
-## Worktree Rules
+## Execution Rules
 
-- Read only the shared planning surface and this worktree's code.
-- Read sibling intent only after it is synchronized into shared docs.
+- Read the shared planning surface and the code needed to prove the current
+  step.
+- Treat unrelated dirty files as baseline state unless the owner explicitly
+  brings them into scope.
 - Stop for owner judgment when plan conflicts appear.
 - Treat missing env / secrets as environment blockers, not code failures.
 
 ## Independent Code Review
 
-Every execution worktree must trigger independent review before reporting a
-completed implementation batch. Review is a completion gate, not a commit-time
-afterthought.
+Every implementation batch must trigger review before reporting completion.
+Review is a completion gate, not a commit-time afterthought.
 
 If the current conversation has no subagent / delegation authorization, write
 `approval-report.md` in the relevant unit before implementation review. The
@@ -139,31 +130,15 @@ Run sufficiency gate before sending:
 python3 .codestable/tools/check-context-sufficiency.py --file /tmp/codestable-human-review.md --strict --json
 ```
 
-## Finish And Commit Gates
+## Commit Planning And Final Checks
 
-Before finish / merge:
-
-```bash
-python3 .codestable/tools/codestable-finish-worktree.py --root . --unit .codestable/features/YYYY-MM-DD-{slug} --json --validation "{验证命令} -> {结果}"
-```
-
-Finish gate writes learning, context-check, merge-readiness, and inbox records.
-If a branch changes after the finish report, state becomes `stale-report` and
-finish must rerun.
-
-Commit finish artifacts as a small final commit when the gate passes:
+Before commit or final report, gather fresh validation evidence and confirm the
+review report is present and passed. Use the read-only commit planner to group
+dirty paths and spot unintended scope expansion:
 
 ```bash
-git add .codestable/features/YYYY-MM-DD-{slug}/{slug}-learning-report.md \
-  .codestable/features/YYYY-MM-DD-{slug}/{slug}-learning-context-check.json \
-  .codestable/features/YYYY-MM-DD-{slug}/{slug}-merge-readiness.json
-git commit -m "docs: add {slug} finish report"
-```
-
-Before commit or final report:
-
-```bash
-python3 .codestable/tools/codestable-worktree-gate.py --root . --json commit --unit .codestable/features/YYYY-MM-DD-{slug}
+python3 .codestable/tools/plan-commits.py --root . --json
+python3 .codestable/tools/validate-implementation-review.py --root . --json
 ```
 
 Useful status tools:
@@ -171,13 +146,6 @@ Useful status tools:
 ```bash
 python3 .codestable/tools/codestable-doctor.py --root . --json
 python3 .codestable/tools/codestable-backlog.py --root . --json
-python3 .codestable/tools/codestable-worktree-inbox.py --root . --json
-```
-
-Snooze accepted merge deferrals:
-
-```bash
-python3 .codestable/tools/codestable-worktree-inbox.py --root . --snooze codex_slug --until 2026-06-12T00:00:00Z --json
 ```
 
 ## Subagent Implementation Choice

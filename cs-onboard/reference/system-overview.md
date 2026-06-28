@@ -11,7 +11,7 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 
 **根入口**——开放式诉求 / 不知道走哪个时的统一入口:
 
-- `cs` — 介绍体系全貌 + 把诉求路由到正确的 cs-* 子技能。本技能不做事,只做分诊和提示
+- `cs` — 介绍体系全貌 + 把诉求自动编排到正确的 cs-* 子技能。它不替下游产出文档或代码，但目标明确时会直接继续执行，不要求用户重复输入下一条命令
 
 **做事**——从一段模糊想法走到上线的功能、或者从一份错误报告走到修好的 bug:
 
@@ -21,7 +21,7 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 - `cs-refactor` — 代码优化(行为不变、结构/性能/可读性变),scan → design → apply
 - `cs-code-review` — 各执行流末端、commit 前的横切独立 diff 评审（质量门禁）
 
-两类都不直接让 AI 写代码,而是先产出 spec(功能方案 / 问题分析),用户 review 后再动手,代码和 doc 一起交付。针对的是术语冲突、范围失控、改完不留存档这三种 AI 默认会出的问题。
+两类都不直接让 AI 写代码,而是先产出 spec(功能方案 / 问题分析),在首次落盘前自动进入 `cs-task` 创建 / 恢复任务,随后按修改 → 回填进度 → 验收 / review → 归档推进。针对的是术语冲突、范围失控、改完不留存档这三种 AI 默认会出的问题。
 
 **沉淀**——把做事过程产生的知识存下来,下次遇到同类问题直接复用:
 
@@ -30,7 +30,7 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 
 **讨论层**——想法还模糊时的统一入口,不直接产出设计或代码:
 
-- `cs-brainstorm` — 和用户对话做分诊:case 1(已经够清楚,直接 feature-design)、case 2(小需求,在 feature 里继续讨论并落 `{slug}-brainstorm.md`)、case 3(大需求,移交给 roadmap)
+- `cs-brainstorm` — 和用户对话做分诊:case 1(已经够清楚,自动进入 feature-design)、case 2(小需求,在 feature 里继续讨论并落 `{slug}-brainstorm.md` 后进入 design)、case 3(大需求,自动交接给 roadmap)
 
 **辅助**——围着前几类转的周边工具:
 
@@ -45,6 +45,10 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 - `cs-doc-api` — 为公开 API 逐条目生成参考文档（从源码反推）
 - `cs-docs-neat` — 阶段 / 里程碑收尾时，全局整理 `.codestable/`、README/docs、`CLAUDE.md` / `AGENTS.md` 和 agent 记忆，做反膨胀、补漏和冲突修正
 - `codestable-maintainer` — 维护 CodeStable 自身技能库 / harness / verifier / installed copy（源仓分支验证 + main-only 同步）
+
+## 入口等价原则
+
+`cs` 是统一分诊入口，但不是唯一完整入口。用户直接进入 `cs-feat` / `cs-issue` / `cs-refactor` / `cs-brainstorm` / `cs-roadmap` / `cs-audit` 时，也必须沿当前分支继续到同一条 workflow 的闭环；不能因为没先经过 `cs`，就把 direct entry 降级成“只给下一步建议 / 推荐运行另一个 skill”的局部入口。目标 skill 已确定且没有开放问题时，当前 agent 必须继续读取并执行目标 skill；需要 L2 review 时用结构化选项等待用户选择，用户选继续后自动续跑。
 
 
 ## 场景路由
@@ -85,13 +89,18 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 用户说"我想要一个 X 系统"这种大需求,先走 roadmap 拆成若干子 feature,再一条一条走 feature 流程。直接起 feature 会变成巨型 design 塞不下、拆了又没有追踪抓手。
 
 
+## Task 是强制主线
+
+只要某个 workflow 准备第一次修改项目内文档或代码,就必须自动进入 `cs-task` 创建或恢复 Task List。之后每推进一步都先回填任务进度、`owner_skill` 和文档索引；fix / implement / apply / fastforward 完成后必须立即进入 `cs-code-review`，review 通过前 Task 不能 completed，review 通过后进入 `cs-task archive`。active 中还有同名任务残留,就不算真正闭环。发现产物或代码已存在但 Task 缺失时，先 backfill Task 并续跑缺失 gate。
+
+
 ## feature 和 issue 的阶段不可跳
 
-feature 走 brainstorm(可选) → design → design-review → implement → code-review → QA → acceptance,issue 走 report → analyze → fix。每个阶段有退出条件,上一个没满足,下一个不开始。
+feature 走 brainstorm(可选) → design → design-review → implement → code-review → QA → acceptance,issue 走 report → analyze → fix → code-review。每个阶段有退出条件,上一个没满足,下一个不开始。
 
 AI 最常见的问题是一口气铺几百行代码才让人看——等发现问题已经很难中止。阶段间的人工 checkpoint 就是为了早一步中止。每个 checkpoint 具体检查什么,对应子技能里讲。
 
-例外两种:issue 根因一眼确定时走快速通道,跳过 analyze 直接 fix;feature 范围小时走 `cs-feat-ff`,写完 spec 直接进实现。
+例外两种:issue 根因一眼确定时走快速通道,跳过 analyze 直接 fix;feature 范围小时走 `cs-feat-ff`，一次确认后直接实现。例外通道也不能跳过 Task、code review 和 archive。
 
 
 ## 进一步参考

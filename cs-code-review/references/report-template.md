@@ -10,7 +10,7 @@
 | issue | `issue-review` | `issue: YYYY-MM-DD-slug` |
 | refactor / refactor-ff | `refactor-review` | `refactor: YYYY-MM-DD-slug` |
 
-`status` / `reviewed` / `round` 各来源通用。`reviewer` 是 gate 锚点字段：启用了独立 subagent review 时写 `subagent`，仅本地 self review 时写 `self`。worktree / commit / finish gate 默认要求 `reviewer: subagent`；`self` 需配 `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` 才放行。`status: passed` 时必填 `reviewer`。
+`status` / `reviewed` / `round` 各来源通用。`reviewer` 是 review evidence gate 锚点字段：启用了独立 subagent review 时写 `subagent`，仅本地 self review 时写 `self`。review evidence gate 默认要求 `reviewer: subagent`；`self` 需配 `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` 才放行。`status: passed` 时必填 `reviewer`。
 
 ```markdown
 ---
@@ -36,6 +36,7 @@ round: 1
 
 - Status: not-available|skipped-by-user|local-only|pending|completed|failed|blocked
 - Detection: paseo-subagent|local-review-with-agent-cli-available|local-review|skipped
+- Runtime params: {current conversation inherited / owner-specified for this run / none}
 - Provider / agent: {providers.audit / agent id / none}
 - Raw output: {摘要 / 路径 / none}
 - Merge policy: {已逐条核验 / 未启用原因 / pending 时不得定稿}
