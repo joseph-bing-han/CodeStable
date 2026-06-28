@@ -79,7 +79,7 @@ python3 .codestable/tools/validate-yaml.py --file {文件路径}.md --require do
 python3 .codestable/tools/validate-yaml.py --dir .codestable/features --require doc_type --require status
 ```
 
-目录模式默认只校验 `.md` frontmatter；要批量校验纯 YAML 目录必须显式加 `--yaml-only`。不要对混有 checklist/items/goal-state 的目录直接加 `--require doc_type --require status`；纯 YAML 没有 Markdown frontmatter 字段，会造成假失败。
+目录模式默认只校验 `.md` frontmatter；要批量校验纯 YAML 目录必须显式加 `--yaml-only`。不要对混有 checklist/items/goal-state 的目录直接加 `--require doc_type --require status`；纯 YAML 没有 Markdown frontmatter 字段，会造成假失败。若目录里有 `worktree-override.md` 这类无 frontmatter 的人工说明，改用单文件校验或只校验生命周期文档所在子集。
 
 ---
 
