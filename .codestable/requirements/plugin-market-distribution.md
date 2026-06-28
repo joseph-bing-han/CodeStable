@@ -6,6 +6,7 @@ status: current
 last_reviewed: 2026-07-01
 implemented_by:
   - 2026-07-01-plugin-market-distribution
+  - 2026-07-16-cursor-plugin-v104-hardening
 tags: [plugin, distribution, versioning]
 ---
 
@@ -16,6 +17,7 @@ tags: [plugin, distribution, versioning]
 - 作为第一次接触 CodeStable 的开发者，我希望用一条插件安装命令拿到完整 `cs` 工作流，而不是自己拷贝一堆 skill 目录。
 - 作为同时使用 Codex 和 Claude 的开发者，我希望两边安装到的是同一个 CodeStable 版本，而不是两套内容逐渐漂移。
 - 作为不使用 Codex / Claude plugin marketplace 的开发者，我希望仍能用 `npx skills@latest add ...` 安装 CodeStable skills。
+- 作为使用 Cursor 的开发者，我希望通过 Cursor marketplace 安装同一份 CodeStable skills，并与其他宿主保持同一版本。
 - 作为维护者，我希望发布前能检查版本号、manifest 和打包内容一致，而不是发布后才发现某个 skill 或 reference 漏了。
 
 ## 为什么需要
@@ -24,7 +26,7 @@ tags: [plugin, distribution, versioning]
 
 ## 怎么解决
 
-为 CodeStable 增加一组可提交的插件安装资产。维护者在当前仓库的插件实体里维护唯一 skill 源，同时适配 Codex、Claude 和 `skills` CLI；统一版本号和变更日志说明这一版包含什么。
+为 CodeStable 增加一组可提交的插件安装资产。维护者在当前仓库的插件实体里维护唯一 skill 源，同时适配 Codex、Claude、Cursor 和 `skills` CLI；统一版本号和变更日志说明这一版包含什么。
 
 ## 边界
 
@@ -37,3 +39,4 @@ tags: [plugin, distribution, versioning]
 ## 实现记录
 
 - 2026-07-01：`2026-07-01-plugin-market-distribution` 完成第一版插件分发结构。CodeStable `cs` / `cs-*` skills 迁移到 `plugins/codestable/skills/`，新增 Codex / Claude marketplace catalog、插件 manifest、`VERSION` / `CHANGELOG.md`，并用 `tools/check-plugin-package.py` 校验版本、manifest、目录边界和临时产物排除。
+- 2026-07-16：新增 Cursor marketplace 分发入口，并加固跨宿主 manifest 身份、版本和安装文档校验。

@@ -14,6 +14,12 @@ contracts:
 
 ## 启动必读
 
+### 本地 Task 与 Review spine
+
+`cs-refactor` 是完整入口。扫描和设计收敛后、首次落盘 refactor 产物或代码前，必须自动创建或恢复 active Task。apply 阶段先完成 checklist 定义的整个行为等价批次并持续更新 Task，再统一进入 `cs-code-review`；不得在计划内重构仍有 pending 项时提前 review。
+
+`changes-requested` 时集中修复本轮全部 blocking/important findings，再统一复审。review passed 后当前 run 继续 `cs-task complete` 和原子 archive；active 同名 Task 仍存在时不得 final answer。明确阶段自动推进，不要求用户手动输入下一条 `/cs-*`。
+
 动作前先跑 CodeStable preflight：读 `.codestable/attention.md`（缺失先 `cs-onboard`）；不要用 `AGENTS.md`/`CLAUDE.md` 等外部入口代替它；细则见 `.codestable/reference/execution-conventions.md`。
 
 `cs-refactor` 是重构的唯一推荐入口。它统一判定标准模式和 fastforward 模式，核心底线是行为等价：一旦会改变外部可观察行为，就转 `cs-feat` 或 `cs-issue`。

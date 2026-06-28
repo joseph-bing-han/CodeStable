@@ -1,0 +1,21 @@
+feature: 2026-07-17-restore-local-override-workflow
+status: active
+steps:
+  - id: document-contract
+    title: Record the canonical local override workflow contract
+    status: done
+  - id: restore-task-runtime
+    title: Restore cs-task and the guarded Task runtime
+    status: done
+  - id: remove-ocr-review
+    title: Remove OCR dependencies from the independent review gate
+    status: done
+  - id: enforce-workflow-spine
+    title: Enforce Task and batched review gates across workflow entries
+    status: done
+  - id: add-regression-tests
+    title: Add local override regression tests
+    status: done
+  - id: validate-runtime
+    title: Run tests, diff checks, and runtime synchronization checks
+    status: done

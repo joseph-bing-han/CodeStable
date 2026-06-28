@@ -19,8 +19,8 @@ contracts:
 # cs-epic
 
 ## 启动必读
-
 动作前先跑 CodeStable preflight：读 `.codestable/attention.md`（缺失先 `cs-onboard`）；不要用 `AGENTS.md`/`CLAUDE.md` 等外部入口代替它；细则见 `.codestable/reference/execution-conventions.md`。
+`cs-epic` 是完整入口。roadmap/design 首次落盘前必须自动创建或恢复 parent active Task；每个 child feature 使用自己的 Task spine，parent Task 记录 child 状态和文档索引。child 实现完成后按 child 完整批次统一进入 `cs-code-review`，不在 child checklist 尚未完成时提前审查。所有 child acceptance 与独立 review 证据齐全后，parent Task 才能 complete；当前 run 必须继续原子 archive，active 同名 Task 仍存在时不得 final answer。确定性的 planning→review→child batch→goal package/dispatch 全部自动推进，不要求用户重新输入 `/cs-*`。
 
 `cs-epic` 是大需求端到端入口。用户文档统一叫 epic；为兼容历史产物，第一版内部目录、frontmatter 和工具仍使用 `roadmap`。用户确认 roadmap 和所有子 feature design 后，默认生成 goal 包并尝试通过可见 Task agent goal driver 长程执行；派发失败则打印 `/goal` 指令让用户粘贴执行。
 

@@ -12,6 +12,8 @@ from typing import Any
 
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 CODESTABLE_SKILL_RE = re.compile(r"^cs(?:-.+)?$")
+CURSOR_MARKETPLACE_PATH = ".cursor-plugin/marketplace.json"
+CURSOR_PLUGIN_SOURCE = "plugins/codestable"
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,7 @@ def check_manifest_versions(root: Path, version: str | None, findings: list[Find
     manifests = [
         ("plugins/codestable/.codex-plugin/plugin.json", ["version"]),
         ("plugins/codestable/.claude-plugin/plugin.json", ["version"]),
+        ("plugins/codestable/.cursor-plugin/plugin.json", ["version"]),
         (".claude-plugin/marketplace.json", ["plugins", 0, "version"]),
         (".agents/plugins/marketplace.json", ["plugins", 0, "version"]),
     ]
@@ -151,6 +154,75 @@ def check_catalog_contracts(root: Path, findings: list[Finding]) -> None:
             findings.append(Finding(".agents/plugins/marketplace.json", "plugins.0.interface.displayName is required"))
 
 
+def check_cursor_distribution_contract(root: Path, findings: list[Finding]) -> None:
+    marketplace, marketplace_error = read_json(root / CURSOR_MARKETPLACE_PATH)
+    if marketplace_error:
+        findings.append(Finding(CURSOR_MARKETPLACE_PATH, marketplace_error))
+        return
+    if not isinstance(marketplace, dict):
+        findings.append(Finding(CURSOR_MARKETPLACE_PATH, "manifest root must be an object"))
+        return
+
+    marketplace_name = nested(marketplace, ["name"])
+    marketplace_entry_name = nested(marketplace, ["plugins", 0, "name"])
+    marketplace_owner_name = nested(marketplace, ["owner", "name"])
+    source_value = nested(marketplace, ["plugins", 0, "source"])
+
+    if marketplace_name != "codestable":
+        findings.append(Finding(CURSOR_MARKETPLACE_PATH, "name must equal 'codestable'"))
+    if marketplace_entry_name != "codestable":
+        findings.append(Finding(CURSOR_MARKETPLACE_PATH, "plugins.0.name must equal 'codestable'"))
+    if marketplace_owner_name != "CodeStable":
+        findings.append(Finding(CURSOR_MARKETPLACE_PATH, "owner.name must equal 'CodeStable'"))
+    if source_value != CURSOR_PLUGIN_SOURCE:
+        findings.append(
+            Finding(
+                CURSOR_MARKETPLACE_PATH,
+                f"plugins.0.source must equal {CURSOR_PLUGIN_SOURCE!r}",
+            )
+        )
+    if not isinstance(source_value, str) or not source_value:
+        findings.append(Finding(CURSOR_MARKETPLACE_PATH, "plugins.0.source must be a non-empty relative path"))
+        return
+
+    source_directory = (root / source_value).resolve()
+    try:
+        source_directory.relative_to(root)
+    except ValueError:
+        findings.append(Finding(CURSOR_MARKETPLACE_PATH, "plugins.0.source must resolve inside the repository"))
+        return
+
+    source_path = rel(source_directory, root)
+    if not source_directory.is_dir():
+        findings.append(Finding(CURSOR_MARKETPLACE_PATH, f"plugins.0.source directory is missing: {source_path}"))
+        return
+
+    plugin_manifest_path = source_directory / ".cursor-plugin/plugin.json"
+    plugin_manifest_relative = rel(plugin_manifest_path, root)
+    plugin_manifest, plugin_error = read_json(plugin_manifest_path)
+    if plugin_error:
+        findings.append(Finding(plugin_manifest_relative, plugin_error))
+        return
+    if not isinstance(plugin_manifest, dict):
+        findings.append(Finding(plugin_manifest_relative, "manifest root must be an object"))
+        return
+
+    plugin_name = nested(plugin_manifest, ["name"])
+    if plugin_name != "codestable":
+        findings.append(Finding(plugin_manifest_relative, "name must equal 'codestable'"))
+    if marketplace_entry_name != plugin_name:
+        findings.append(
+            Finding(
+                CURSOR_MARKETPLACE_PATH,
+                "plugins.0.name must equal the referenced Cursor plugin manifest name",
+            )
+        )
+    if nested(plugin_manifest, ["skills"]) != "./skills/":
+        findings.append(Finding(plugin_manifest_relative, "skills must equal './skills/'"))
+    if not (source_directory / "skills").is_dir():
+        findings.append(Finding(plugin_manifest_relative, "skills path does not resolve to a directory"))
+
+
 def check_skill_layout(root: Path, findings: list[Finding]) -> None:
     skills_dir = root / "plugins/codestable/skills"
     if not skills_dir.is_dir():
@@ -195,8 +267,10 @@ def check_ignored_assets(root: Path, findings: list[Finding]) -> None:
     assets = [
         root / ".agents/plugins/marketplace.json",
         root / ".claude-plugin/marketplace.json",
+        root / ".cursor-plugin/marketplace.json",
         root / "plugins/codestable/.codex-plugin/plugin.json",
         root / "plugins/codestable/.claude-plugin/plugin.json",
+        root / "plugins/codestable/.cursor-plugin/plugin.json",
         root / "plugins/codestable/skills/cs/SKILL.md",
     ]
     for path in assets:
@@ -241,12 +315,17 @@ def check_source_plugin_skills_only(root: Path, findings: list[Finding]) -> None
     for filename in (
         "plugins/codestable/.codex-plugin/plugin.json",
         "plugins/codestable/.claude-plugin/plugin.json",
+        "plugins/codestable/.cursor-plugin/plugin.json",
     ):
         data, error = read_json(root / filename)
         if error or not isinstance(data, dict):
             continue
-        if data.get("mcpServers"):
+        if "mcpServers" in data:
             findings.append(Finding(filename, "source plugin manifest must remain skills-only; MCP registration belongs to optional runtime integrations"))
+        if "agents" in data:
+            findings.append(Finding(filename, "source plugin manifest must remain skills-only; agent registration is not part of this package"))
+        if "hooks" in data:
+            findings.append(Finding(filename, "source plugin manifest must remain skills-only; hook registration is not part of this package"))
 
 
 def check_readme_commands(root: Path, findings: list[Finding]) -> None:
@@ -256,6 +335,11 @@ def check_readme_commands(root: Path, findings: list[Finding]) -> None:
         "codex plugin marketplace upgrade codestable",
         "/plugin marketplace update",
         "/plugin update codestable@codestable",
+        "https://cursor.com/docs/plugins",
+        "Dashboard -> Plugins",
+        "Import from Repo",
+        "Enable Auto Refresh",
+        "Customize",
     ]
     forbidden = ["codex plugin install codestable"]
     required_lines = [
@@ -293,6 +377,7 @@ def check_repo(root: Path) -> list[Finding]:
     check_manifest_versions(root, version, findings)
     check_standalone_version(root, version, findings)
     check_catalog_contracts(root, findings)
+    check_cursor_distribution_contract(root, findings)
     check_skill_layout(root, findings)
     check_reference_directory_spellings(root, findings)
     check_ignored_assets(root, findings)

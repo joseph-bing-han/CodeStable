@@ -1,0 +1,35 @@
+roadmap: automatic-orchestration-protocol
+created: 2026-05-30
+
+items:
+  - slug: orchestration-shared-protocol
+    description: 在共享口径中定义自动编排、checkpoint 分级、handoff 和结构化提问协议
+    depends_on: []
+    status: done
+    feature: null
+    minimal_loop: true
+    notes: "后续入口和阶段技能改造的共同约束"
+
+  - slug: orchestration-entry-skills
+    description: 改造 cs、cs-feat、cs-issue、cs-task、cs-roadmap，让路由结果自动执行
+    depends_on: [orchestration-shared-protocol]
+    status: done
+    feature: null
+    minimal_loop: false
+    notes: "优先消除无意义二次触发"
+
+  - slug: orchestration-stage-skills
+    description: 改造 brainstorm、feature、issue 阶段技能的退出语义，让 review 通过后自动进入下一阶段
+    depends_on: [orchestration-shared-protocol, orchestration-entry-skills]
+    status: done
+    feature: null
+    minimal_loop: false
+    notes: "保留真实 checkpoint，不跳过 review"
+
+  - slug: orchestration-consistency-pass
+    description: 全仓扫描并修正相关 skill 中旧式路由、提问、退出表述，完成一致性验收
+    depends_on: [orchestration-entry-skills, orchestration-stage-skills]
+    status: done
+    feature: null
+    minimal_loop: false
+    notes: "包括检查 Markdown 文档不超过 300 行"

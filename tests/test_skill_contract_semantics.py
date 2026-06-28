@@ -25,6 +25,7 @@ ACTIVE_SKILLS = {
     "cs-onboard",
     "cs-refactor",
     "cs-req",
+    "cs-task",
 }
 
 COMPATIBILITY_SKILLS = {
@@ -185,13 +186,13 @@ def test_onboard_does_not_assume_sibling_skills_or_overwrite_dirty_runtime() -> 
         "PreserveManagedAssets = Right StopPreservingFiles",
         "ApproveMigrationMapping = Right ApplyMigrationMapping",
         "SkipMigrationMapping = Right KeepOriginalFile",
-        "ApproveGlobalInstall = Right InstallOptionalTool",
-        "SkipGlobalInstall = Right ContinueWithoutOcr",
         "resumeOnboard _ _ = Left InvalidOnboardDecision",
     ):
         assert resume in onboard
     assert "HumanCheckpoint (ConfirmMigrationMapping source candidates)" in onboard
-    assert "HumanCheckpoint ConfirmGlobalInstall" in onboard
+    assert "ConfirmGlobalInstall" not in onboard
+    assert "InstallOptionalTool" not in onboard
+    assert "ContinueWithoutOcr" not in onboard
     assert "按已安装 skill 名称加载 `cs-onboard`" in execution
     assert "不得假设当前 skill 能读取 sibling 目录" in execution
     assert "../cs-onboard" not in execution
@@ -331,7 +332,7 @@ def test_feature_agent_gates_persist_recoverable_state() -> None:
     assert "ReviewNeedsOwnerApproval Reason" in feature
     assert "ReviewerFailed Reason" in feature
     assert "旧 `blocked` 无 `review_state` 时 fail-closed" in feature
-    assert "data OwnerApproval = ApproveLocalOnly" in agent_conventions
+    assert "reviewGate (SelectionBlocked reason) NotStarted _ = Blocked reason" in agent_conventions
 
 
 def test_feature_and_epic_classify_stage_conflicts_as_needs_human() -> None:
@@ -419,38 +420,26 @@ def test_code_review_lane_launch_wait_and_resume_preserve_run_identity() -> None
     conventions = skill("cs-onboard/references/agent-conventions.md")
 
     for phrase in (
-        "data ExternalRunRef = TaskRunRef AgentRef | OcrRunRef Text",
-        "| Launching LaneName",
-        "data ReviewWait = LaneStillPending LaneName ExternalRunRef",
-        "ResumeLane LaneName ExternalRunRef LaneResult",
-        "ResumeSelfReviewDowngrade ApprovalRef",
-        "restoreReviewState :: RepoFacts -> Either ReviewBlocker ReviewState",
-        "invalidPersistedLaneState facts = Left InvalidReviewResume",
-        "fullRereviewRequired facts = Right (resetLanesForNewRound facts)",
-        "restoreReviewState req.repoFacts >>= applyReviewResume req.resumeInput",
-        "pendingLaneRef lane s == Just ref",
-        'approvalArtifactApproved s ref "code-review-local-only"',
+        "data ReviewerState",
+        "| Pending AgentRef",
+        "data ReviewResume = ResumeReviewer AgentRef ReviewerResult",
         "InvalidReviewResume",
-        "旧 `status: blocked` 缺 lane/ref 或非法 enum 直接 `Left InvalidReviewResume`",
+        "真实 `AgentRef` 写入报告",
+        "恢复输入必须匹配同一 round/ref",
     ):
         assert phrase in review
     for field in (
-        "lane_a_state:",
-        "lane_a_ref:",
-        "lane_a_reason:",
-        "lane_b_state:",
-        "lane_b_ref:",
-        "lane_b_reason:",
+        "reviewer_state:",
+        "reviewer_ref:",
+        "reviewer_reason:",
     ):
         assert field in report
-    assert "not-started|ready-to-launch|pending|completed|failed|skipped|unavailable" in report
-    assert "focused closure 复用同 round 的 completed；完整复审增加 round 并重置 lane" in report
-    assert "MergeLaunch LaneName LaneCommand" in protocol
-    assert "OcrActive Text" in protocol
-    assert "mergeGate (Await ref)" in protocol
-    assert "pending (RunCommitted _)" not in protocol
-    assert "正常同步执行" in protocol
-    assert "不得自行合成 id" in protocol
+    assert "ready-to-launch|pending|completed|failed|unavailable" in report
+    assert "完整复审必须增加 `round`" in review
+    assert "reviewGate (selectTaskAgent Review env)" in protocol
+    assert "Active AgentRef" in protocol
+    assert "恢复时 round/ref 必须精确匹配" in protocol
+    assert "OcrActive Text" not in protocol
     assert "| Await AgentRef" in conventions
     assert "reviewGate _ (Active ref) _ = Await ref" in conventions
     assert "toReviewLane (Await _) = Left AgentLaneNotReturned" in conventions

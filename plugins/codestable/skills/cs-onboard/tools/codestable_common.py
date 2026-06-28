@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
+
+from codestable_gate_common import load_yaml_text
 
 
 IMPLEMENTATION_PREFIXES = (
@@ -55,7 +58,49 @@ IMPLEMENTATION_SUFFIXES = (
 )
 
 UNIT_ROOTS = ("features", "issues", "refactors")
-SUBAGENT_REVIEWERS = {"subagent", "subagent+ocr"}
+CANONICAL_REVIEWERS = frozenset({"subagent"})
+LEGACY_READABLE_REVIEWERS = frozenset({"subagent+ocr"})
+SUBAGENT_REVIEWERS = CANONICAL_REVIEWERS | LEGACY_READABLE_REVIEWERS
+REVIEW_SCHEMA_BY_UNIT_ROOT = {
+    "features": ("feature-review", "feature"),
+    "issues": ("issue-review", "issue"),
+    "refactors": ("refactor-review", "refactor"),
+}
+LEGACY_REVIEW_CUTOFF_DATE = date(2026, 7, 17)
+# reviewer gate 不再硬编码固定 provider/model：reviewer 使用当前模型的最高思考等级即可，
+# 只对已知需要显式档位的模型强制约束（gpt-5.6-sol 的最高档在宿主里叫 xhigh）。
+REVIEWER_REASONING_OVERRIDES = {
+    "gpt-5.6-sol": "xhigh",
+}
+# Fast / Explore 轻量预设或已知降级异构模型不得充当 reviewer。这类预设（例如
+# Explore 会用的 gpt-5.6-tera-*）正是 review 被静默降级到低思考档的根因；模型名
+# 按分隔符切成的 token 中若有整段等于任一标记即 fail-closed，防止契约声明的
+# “禁止 Fast/Explore”只停留在散文层。
+#
+# 必须按 token 段精确匹配、不能用裸子串：像 "gemini-2.5-pro" 这样的合法顶配模型名
+# 含子串 "mini"（ge+mini），"elite" 含 "lite"，裸子串会把它们误判成降级模型。
+# 按 "-._/ " 切段后 "gemini"/"2.5"/"pro" 均不等于任何标记，因此 Gemini Pro 可通过；
+# 而 "gpt-5.6-tera-high" 切出的 "tera" 段整段命中标记，仍被拒。
+FORBIDDEN_REVIEWER_MODEL_MARKERS = frozenset(
+    {
+        "tera",
+        "fast",
+        "explore",
+        "explorer",
+        "flash",
+        "haiku",
+        "mini",
+        "nano",
+        "lite",
+        "small",
+    }
+)
+REVIEWER_MODEL_TOKEN_RE = re.compile(r"[a-z0-9]+")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+AGENT_REF_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 KNOWN_SKILL_DIRS = {
     "codestable-maintainer",
     "cs",
@@ -90,6 +135,7 @@ KNOWN_SKILL_DIRS = {
     "cs-roadmap",
     "cs-roadmap-impl-goal",
     "cs-roadmap-review",
+    "cs-task",
 }
 
 
@@ -326,12 +372,281 @@ def iter_units(root: Path) -> list[Path]:
     return sorted(units, key=lambda path: path.as_posix())
 
 
-def review_has_subagent_evidence(path: Path) -> bool:
-    if not path.exists():
+def review_unit_schema(path: Path) -> tuple[str, str, str, str] | None:
+    unit_dir = path.parent
+    unit_root = unit_dir.parent.name
+    schema = REVIEW_SCHEMA_BY_UNIT_ROOT.get(unit_root)
+    if schema is None or unit_dir.parent.parent.name != ".codestable":
+        return None
+    expected_doc_type, identity_field = schema
+    slug = unit_slug(Path(".codestable") / unit_root / unit_dir.name)
+    expected_filename = f"{slug}-review.md"
+    return expected_doc_type, identity_field, unit_dir.name.lower(), expected_filename
+
+
+def reviewer_reasoning_is_valid(model: object, reasoning: object) -> bool:
+    """校验 reviewer 模型与思考等级。
+
+    契约是 reviewer 使用**当前对话主模型的可用最高思考等级**。gate 无法枚举每个
+    模型的档位名，也不能假设某个通用档位名（如 low/medium）一定不是最高档——某些
+    模型只有单一档位，那个唯一档就是它的最高档，不应因此判失败。因此：
+
+    - 对任意模型只要求 model/reasoning 均为非空字符串；具体是否为“最高档”由派发
+      纪律与 REVIEWER_REASONING_OVERRIDES 保证，不用通用档位名黑名单机械否决。
+    - 模型名按分隔符切成的 token 段中若有整段等于 FORBIDDEN_REVIEWER_MODEL_MARKERS
+      （Fast/Explore/tera 等降级异构预设）时拒绝——这类预设是“换了个更弱的模型”，与
+      档位高低无关，是 review 被静默降级的根因，契约声明的“禁止 Fast/Explore”必须由
+      gate 强制。按 token 段精确匹配而非裸子串，避免误伤合法模型名（如 "gemini-2.5-pro"
+      含子串 "mini"、"elite" 含 "lite"）。
+    - 对已知需要显式最高档名的模型（见 REVIEWER_REASONING_OVERRIDES）强制到指定值。
+    """
+    if type(model) is not str or not model.strip():
         return False
-    for line in path.read_text(encoding="utf-8").splitlines():
-        key, sep, value = line.partition(":")
-        if sep and key.strip().lower() == "reviewer" and value.strip().lower() in SUBAGENT_REVIEWERS:
+    if type(reasoning) is not str or not reasoning.strip():
+        return False
+    # 输入先归一化一次，后续匹配与查表统一复用同一个小写形式，避免 casing 不一致
+    # 造成的绕过（例如 FORBIDDEN 用小写匹配、override 用原样查表时，"GPT-5.6-Sol"
+    # 会跳过 gpt-5.6-sol 的 xhigh 强制）。REVIEWER_REASONING_OVERRIDES 的 key 也用小写。
+    normalized_model = model.strip().lower()
+    model_tokens = set(REVIEWER_MODEL_TOKEN_RE.findall(normalized_model))
+    if model_tokens & FORBIDDEN_REVIEWER_MODEL_MARKERS:
+        return False
+    required = REVIEWER_REASONING_OVERRIDES.get(normalized_model)
+    if required is not None:
+        return reasoning.strip().lower() == required
+    return True
+
+
+def review_has_canonical_evidence(path: Path) -> bool:
+    schema = review_unit_schema(path)
+    if schema is None:
+        return False
+    expected_doc_type, identity_field, expected_identity, expected_filename = schema
+    if path.name != expected_filename:
+        return False
+    fields = review_frontmatter_data(path)
+    round_value = fields.get("round")
+    reviewer_ref = fields.get("reviewer_ref")
+    reviewer_provider = fields.get("reviewer_provider")
+    task_generation_sha256 = fields.get("task_generation_sha256")
+    review_basis_sha256 = fields.get("review_basis_sha256")
+    return bool(
+        fields.get("status") == "passed"
+        and fields.get("reviewer") in CANONICAL_REVIEWERS
+        and fields.get("doc_type") == expected_doc_type
+        and fields.get(identity_field) == expected_identity
+        and type(round_value) is int
+        and round_value > 0
+        and fields.get("reviewer_state") == "completed"
+        and type(reviewer_ref) is str
+        and AGENT_REF_RE.fullmatch(reviewer_ref.strip())
+        and type(reviewer_provider) is str
+        and reviewer_provider.strip()
+        and reviewer_reasoning_is_valid(
+            fields.get("reviewer_model"), fields.get("reviewer_reasoning")
+        )
+        and fields.get("reviewer_readonly") is True
+        and type(task_generation_sha256) is str
+        and SHA256_RE.fullmatch(task_generation_sha256)
+        and type(review_basis_sha256) is str
+        and SHA256_RE.fullmatch(review_basis_sha256)
+    )
+
+
+def task_generation_sha256(root: Path, task: str) -> str | None:
+    task_path = root / ".codestable/tasks/active" / f"{task}.md"
+    if not task_path.is_file():
+        return None
+    try:
+        content = task_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
+    if not content.startswith("---\n"):
+        return None
+    end_index = content.find("\n---\n", 4)
+    if end_index == -1:
+        return None
+    try:
+        fields = load_yaml_text(content[4:end_index])
+    except (RuntimeError, ValueError):
+        return None
+    if not isinstance(fields, dict):
+        return None
+    created = fields.get("created")
+    stable_generation = {
+        "doc_type": fields.get("doc_type"),
+        "task": fields.get("task"),
+        "goal": fields.get("goal"),
+        "workflow": fields.get("workflow"),
+        "created": created.isoformat() if type(created) is date else created,
+    }
+    if (
+        stable_generation["doc_type"] != "task-list"
+        or stable_generation["task"] != task
+        or any(value in {None, ""} for value in stable_generation.values())
+    ):
+        return None
+    serialized = json.dumps(
+        stable_generation,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
+def review_basis_path_is_excluded(path: str, review_path: str) -> bool:
+    path_object = Path(path)
+    return bool(
+        path == review_path
+        or path.startswith(".codestable/tasks/")
+        or path_object.name == "approval-report.md"
+        or path_object.name == "goal-state.yaml"
+        or path_object.name.endswith("-qa.md")
+        or path_object.name.endswith("-acceptance.md")
+    )
+
+
+def review_basis_sha256(root: Path, review_path: Path) -> str:
+    resolved_root = root.resolve()
+    review_relative = review_path.resolve().relative_to(resolved_root).as_posix()
+    records: list[tuple[str, str, str]] = []
+    if (resolved_root / ".git").exists():
+        changed_files = git_status(resolved_root)
+        for changed_file in changed_files:
+            path = changed_file.path
+            if review_basis_path_is_excluded(path, review_relative):
+                continue
+            absolute_path = resolved_root / path
+            digest = (
+                hashlib.sha256(absolute_path.read_bytes()).hexdigest()
+                if absolute_path.is_file()
+                else "deleted"
+            )
+            records.append((path, changed_file.status, digest))
+    else:
+        for absolute_path in sorted(
+            path
+            for path in resolved_root.rglob("*")
+            if path.is_file() and ".git" not in path.parts
+        ):
+            relative_path = absolute_path.relative_to(resolved_root).as_posix()
+            if review_basis_path_is_excluded(relative_path, review_relative):
+                continue
+            records.append(
+                (
+                    relative_path,
+                    "filesystem",
+                    hashlib.sha256(absolute_path.read_bytes()).hexdigest(),
+                )
+            )
+    serialized = json.dumps(
+        sorted(records),
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
+def review_evidence_matches_repository(path: Path) -> bool:
+    schema = review_unit_schema(path)
+    if schema is None or not review_has_canonical_evidence(path):
+        return False
+    fields = review_frontmatter_data(path)
+    root = path.parent.parent.parent.parent
+    task = unit_slug(path.parent.relative_to(root))
+    return bool(
+        fields.get("task_generation_sha256") == task_generation_sha256(root, task)
+        and fields.get("review_basis_sha256") == review_basis_sha256(root, path)
+    )
+
+
+def review_has_subagent_evidence(path: Path) -> bool:
+    schema = review_unit_schema(path)
+    if schema is None:
+        return False
+    expected_doc_type, identity_field, expected_identity, expected_filename = schema
+    if path.name != expected_filename:
+        return False
+    fields = review_frontmatter_data(path)
+    return bool(
+        fields.get("status") == "passed"
+        and fields.get("reviewer") in SUBAGENT_REVIEWERS
+        and fields.get("doc_type") == expected_doc_type
+        and fields.get(identity_field) == expected_identity
+    )
+
+
+def review_frontmatter_data(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return {}
+    if not content.startswith("---\n"):
+        return {}
+    end_index = content.find("\n---\n", 4)
+    if end_index == -1:
+        return {}
+
+    try:
+        parsed = load_yaml_text(content[4:end_index])
+    except (RuntimeError, ValueError):
+        return {}
+    if not isinstance(parsed, dict) or any(type(key) is not str for key in parsed):
+        return {}
+    return parsed
+
+
+def review_frontmatter_fields(path: Path) -> dict[str, str]:
+    parsed = review_frontmatter_data(path)
+
+    fields: dict[str, str] = {}
+    for field_name, field_value in parsed.items():
+        if type(field_value) not in {str, int, float, bool} or field_value is None:
+            continue
+        fields[field_name.strip().lower()] = str(field_value).strip().lower()
+    return fields
+
+
+def workflow_family(workflow: str) -> str:
+    if workflow.startswith("issue"):
+        return "issues"
+    if workflow.startswith("refactor"):
+        return "refactors"
+    if workflow.startswith("feature"):
+        return "features"
+    return workflow
+
+
+def unit_has_archived_task(root: Path, unit_dir: Path) -> bool:
+    archived_root = root / ".codestable/tasks/archived"
+    if not archived_root.exists():
+        return False
+    task_slug = unit_slug(unit_dir)
+    if (root / ".codestable/tasks/active" / f"{task_slug}.md").exists():
+        return False
+    expected_unit_root = unit_dir.parts[1]
+    for task_path in archived_root.glob(f"????-??-??-{task_slug}.md"):
+        try:
+            archived_date = date.fromisoformat(task_path.name[:10])
+        except ValueError:
+            continue
+        if archived_date >= LEGACY_REVIEW_CUTOFF_DATE:
+            continue
+        fields = review_frontmatter_data(task_path)
+        created_date = fields.get("created")
+        updated_date = fields.get("updated")
+        if (
+            fields.get("doc_type") == "task-list"
+            and fields.get("task") == task_slug
+            and fields.get("status") == "archived"
+            and fields.get("archived") == archived_date
+            and type(created_date) is date
+            and type(updated_date) is date
+            and created_date <= archived_date
+            and updated_date <= archived_date
+            and workflow_family(str(fields.get("workflow") or "")) == expected_unit_root
+        ):
             return True
     return False
 
@@ -351,11 +666,17 @@ def missing_review_findings(root: Path, units: list[Path]) -> list[Finding]:
                     path=review_path.as_posix(),
                 )
             )
-        elif not review_has_subagent_evidence(full_review_path):
+        elif review_has_canonical_evidence(full_review_path):
+            continue
+        elif unit_has_archived_task(root, unit_dir) and review_has_subagent_evidence(
+            full_review_path
+        ):
+            continue
+        else:
             findings.append(
                 Finding(
                     severity="P1",
-                    message="CodeStable implementation review must use a Task agent reviewer.",
+                    message="CodeStable implementation review must use a canonical Task agent reviewer (reviewer: subagent).",
                     path=review_path.as_posix(),
                 )
             )

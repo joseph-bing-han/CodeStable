@@ -203,6 +203,7 @@ summary: {本次要做的几条是什么，一句话}
 ---
 doc_type: refactor-apply-notes
 refactor: {YYYY-MM-DD}-{slug}
+status: completed
 ---
 
 # {slug} apply notes
@@ -215,6 +216,8 @@ refactor: {YYYY-MM-DD}-{slug}
 
 ## 步骤 2: ...
 ```
+
+对应 `{slug}-checklist.yaml` 顶层必须记录 `refactor: {YYYY-MM-DD}-{slug}`，文件名固定为 `{slug}-checklist.yaml`；不得用同目录其它 checklist 代替当前 refactor evidence。
 
 ### 全部完成后
 

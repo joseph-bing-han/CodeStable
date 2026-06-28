@@ -252,9 +252,7 @@ def feature_next(repo: Path, slug: str) -> Action:
         return Action("load-reference", "cs-feat/references/design/protocol.md")
     if review_state == "awaiting-reviewer":
         return Action("awaiting", "feature-design-reviewer")
-    if review_state == "needs-owner-approval":
-        return Action("user-checkpoint", "feature-design-review-fallback")
-    if review_state in {"invalid", "legacy-blocked", "reviewer-failed", "blocked"}:
+    if review_state in {"invalid", "legacy-blocked", "reviewer-failed", "blocked", "needs-owner-approval"}:
         return Action("blocked", "feature-design-review-block")
     if design_status == "draft" and review_state != "passed":
         return Action("load-reference", "cs-feat/references/design-review/protocol.md")
@@ -614,57 +612,49 @@ def test_review_outcomes_do_not_treat_waiting_or_missing_input_as_approval() -> 
     text = skill_text("cs-code-review")
     protocol = skill_text("cs-code-review", "references/independent-review/protocol.md")
     for phrase in (
-        "| Awaiting ReviewWait",
+        "| AwaitingReviewer AgentRef",
         "| NeedsHuman ReviewBlocker",
-        "not s.specFinalized                                -> NeedsHuman SpecNotFinalized",
-        "not s.diffAttributed                               -> NeedsHuman DiffNotAttributable",
-        "Just lane <- firstLaunchableLane s                 -> Launching lane",
-        "Just wait <- firstPendingLane s                    -> Awaiting wait",
-        "HumanCheckpoint SelfReviewDowngrade",
+        "not state.specFinalized = NeedsHuman SpecNotFinalized",
+        "not state.implementationBatchComplete = NeedsHuman ImplementationBatchIncomplete",
+        "not state.diffAttributed = NeedsHuman DiffNotAttributable",
+        "state.reviewerState == ReadyToLaunch = LaunchingIndependentReviewer",
+        "state.reviewerState is Pending ref = AwaitingReviewer ref",
+        "state.reviewerState is Unavailable _ = NeedsHuman IndependentReviewerUnavailable",
     ):
         assert phrase in text
     for forbidden in (
         "HumanCheckpoint SpecNotFinalized",
         "HumanCheckpoint DiffNotAttributable",
-        "HumanCheckpoint LaneStillPending",
+        "SelfReviewDowngrade",
+        "CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK",
     ):
         assert forbidden not in text
     guard_order = (
-        "not s.specFinalized",
-        "not s.diffAttributed",
-        "anyLaneFailed s",
-        "firstLaunchableLane s",
-        "firstPendingLane s",
-        "focusedClosureEligible s && hasBlocking s",
-        "focusedClosureEligible s                           -> FocusedClosure Passed",
-        "laneAMissing s",
-        "hasBlocking s                                      -> ReviewWritten ChangesRequested",
+        "not state.specFinalized",
+        "not state.implementationBatchComplete",
+        "not state.diffAttributed",
+        "state.reviewerState is Failed reason",
+        "state.reviewerState is Unavailable _",
+        "state.reviewerState == ReadyToLaunch",
+        "state.reviewerState is Pending ref",
+        "focusedClosureEligible state && hasBlocking state",
+        "focusedClosureEligible state = FocusedClosure Passed",
+        "hasBlocking state = ReviewWritten ChangesRequested",
     )
     assert [text.index(guard) for guard in guard_order] == sorted(
         text.index(guard) for guard in guard_order
     )
     for phrase in (
-        "mergeGate (Launch agent config) _ = MergeLaunch LaneA (TaskCommand agent config)",
-        "mergeGate _ (OcrReady command) = MergeLaunch LaneB (OcrLaneCommand command)",
-        "mergeGate (Await ref) _ = MergeAwaiting (LaneStillPending LaneA (TaskRunRef ref))",
-        "mergeGate _ (OcrActive ref) = MergeAwaiting (LaneStillPending LaneB (OcrRunRef ref))",
-        "mergeGate (NeedOwnerApproval reason) _ = MergeNeedsOwnerApproval reason",
+        "ReadyToLaunch",
+        "Active AgentRef",
+        "Completed Findings",
+        "Failed Reason",
+        "Unavailable Reason",
+        "不 fallback 到 self review 或外部 APP",
     ):
         assert phrase in protocol
-    merge_order = (
-        "mergeGate (Blocked reason) _",
-        "mergeGate _ laneB | failed laneB",
-        "mergeGate (Launch agent config) _",
-        "mergeGate _ (OcrReady command)",
-        "mergeGate (Await ref) _",
-        "mergeGate _ (OcrActive ref)",
-        "mergeGate (NeedOwnerApproval reason) _",
-    )
-    assert [protocol.index(guard) for guard in merge_order] == sorted(
-        protocol.index(guard) for guard in merge_order
-    )
-    assert "Blocked LaneStillPending" not in protocol
-    assert "pending (RunCommitted _)" not in protocol
+    assert "OcrLane" not in protocol
+    assert "`reviewer: self` 或无 reviewer 且无 owner approval：不放行" in protocol
 
 
 def test_issue_fast_path_confirmation_is_persisted_and_resumable() -> None:
@@ -940,19 +930,19 @@ def test_acceptance_separates_evidence_causes_and_reaches_repeated_gap_handoff()
 def test_review_focused_closure_never_masks_failed_or_pending_lanes() -> None:
     review = skill_text("cs-code-review")
     ordered_guards = (
-        "anyLaneFailed s",
-        "firstLaunchableLane s",
-        "firstPendingLane s",
-        "focusedClosureEligible s && hasBlocking s",
-        "focusedClosureEligible s                           -> FocusedClosure Passed",
+        "state.reviewerState is Failed reason",
+        "state.reviewerState is Unavailable _",
+        "state.reviewerState == ReadyToLaunch",
+        "state.reviewerState is Pending ref",
+        "focusedClosureEligible state && hasBlocking state",
+        "focusedClosureEligible state = FocusedClosure Passed",
     )
 
     positions = [review.index(guard) for guard in ordered_guards]
     assert positions == sorted(positions)
-    assert "anyLaneFailed s                                    -> ReviewWritten Blocked" in review
-    assert "s.priorIndependentReview" in review
-    assert "s.priorReview `elem` [Just Passed, Just ChangesRequested]" in review
-    assert "s.changeClass == ClosureOnly" in review
+    assert "state.reviewerState is Failed reason = ReviewWritten Blocked" in review
+    assert "state.priorIndependentReview" in review
+    assert "state.changeClass == ClosureOnly" in review
 
 
 def test_refactor_human_validation_happens_after_the_step_is_applied() -> None:
@@ -1445,26 +1435,21 @@ def test_review_selector_preserves_guard_order_and_scope() -> None:
     )
     review_gate_positions = [selector.index(fragment) for fragment in review_gate_order]
     assert review_gate_positions == sorted(review_gate_positions)
+    # owner-approved local review 降级路径：continued reviewer 不可用时默认 blocked，
+    # 只有 owner 显式 ApproveLocalOnly 才降级为本地 review。
     assert "toReviewLane (NeedOwnerApproval reason) = Left reason" in selector
     assert "data ReviewVerdict = Passed | ChangesRequested | ReviewBlocked Reason" in selector
     assert_doc_contains(
         "cs-code-review",
         "references/independent-review/protocol.md",
-        "dirtyPaths scope `isSubsetOf` currentScope scope",
-        "OcrSkippedByUser",
-        "OcrReady (RunCommitted range)",
-        "OcrActive Text",
-        "MergeLaunch LaneName LaneCommand",
-        "failed (OcrFailed _)",
-        "finished (OcrFinished _)",
-        "verifiedFindings (IndependentFindings findings) laneB",
-        "mergeableDecision (MergeVerified findings)",
-        "`ApproveLocalOnly` 是 owner 的人类授权",
-        "环境变量是 runner 的机械 opt-in",
+        "reviewGate (selectTaskAgent Review env)",
+        "hostAgentCapabilities",
+        "只有 owner 按 `approval-conventions.md` 显式授权 `ApproveLocalOnly`",
+        "新报告固定写 `reviewer: subagent`",
     )
     independent_review = skill_text("cs-code-review", "references/independent-review/protocol.md")
-    assert "otherwise                       = Blocked IndependentReviewRequired" not in independent_review
-    assert "reviewerField LocalReview" not in independent_review
+    assert "OcrLane" not in independent_review
+    assert "CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK" not in independent_review
 
 
 def test_cs_skills_depend_on_host_agent_behavior_not_a_backend_tool_name() -> None:

@@ -1,0 +1,51 @@
+roadmap: codestable-task-system
+created: 2026-05-30
+
+items:
+  - slug: task-core-storage-runtime
+    description: 新增 tasks 目录模型、task list 文件格式、状态机、cs-task 技能入口和恢复归档流程
+    depends_on: []
+    status: done
+    feature: 2026-05-30-task-core-storage-runtime
+    minimal_loop: true
+    notes: 完成后可以手动创建 active task，运行 cs task 恢复并归档
+
+  - slug: task-integration-policy
+    description: 定义所有 CS skill 的 auto、ask、route-only、internal 接入等级和防递归规则
+    depends_on: [task-core-storage-runtime]
+    status: planned
+    feature: null
+    minimal_loop: false
+    notes: 先固化接入等级，避免后续修改遗漏技能
+
+  - slug: task-agent-sync-protocol
+    description: 定义并接入 Agent 原生 Tasks/Todo 同步协议
+    depends_on: [task-core-storage-runtime]
+    status: planned
+    feature: null
+    minimal_loop: false
+    notes: 第一版以协议和技能行为为主，不为每个 Agent 写私有 SDK
+
+  - slug: task-core-workflow-integration
+    description: 接入所有自动进入 Tasks 的重要变更技能
+    depends_on: [task-integration-policy, task-agent-sync-protocol]
+    status: planned
+    feature: null
+    minimal_loop: false
+    notes: 覆盖 onboard、roadmap、req、arch、feature、issue、refactor、audit 等重要变更技能
+
+  - slug: task-optional-workflow-integration
+    description: 接入所有询问是否进入 Tasks 的次要变更技能，并统一 user_question_answer 交互
+    depends_on: [task-integration-policy, task-agent-sync-protocol]
+    status: planned
+    feature: null
+    minimal_loop: false
+    notes: 覆盖 brainstorm、note、learn、trick、decide、explore、guide、libdoc 等次要变更技能
+
+  - slug: task-onboard-docs-consistency
+    description: 更新 onboard 模板、共享约定、系统总览、维护说明、根入口和 README
+    depends_on: [task-core-workflow-integration, task-optional-workflow-integration]
+    status: planned
+    feature: null
+    minimal_loop: false
+    notes: 同步修正 brainstorm/brainstorms 路径不一致等共享约定漂移

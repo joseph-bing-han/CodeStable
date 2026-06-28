@@ -1,4 +1,4 @@
 interface:
   display_name: "CodeStable Feature Review"
   short_description: "实现后 code review gate"
-  default_prompt: "使用 $cs-code-review 审查本轮实现 diff；按 Task agent 选择规则启动独立 Task agent reviewer，并输出 review 报告。"
+  default_prompt: "使用 $cs-code-review 审查本轮实现 diff；按 `.codestable/reference/tools.md` 的 Subagent Runtime Mapping，优先使用只读 codestable-code-reviewer，并让 reviewer 运行在当前对话主模型的最高思考等级（Opus 4.8 → max，gpt-5.6-sol → xhigh）。custom agent 不可用时，仅在 runtime 能请求当前主模型最高档或明确保证继承当前主模型时，才用 agents/code-reviewer.md + code-reviewer.md 桥接 readonly generalPurpose；否则当前主模型 self review。禁止 Explore、Fast、model: fast 和 unknown-model bridge。"

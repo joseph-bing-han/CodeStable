@@ -24,4 +24,4 @@ CodeStable 所有落盘产出的正文用**中文**：plan / design、plan revie
 
 ### 其他
 
-- 本仓库所有 CodeStable review gate（含 design review、code review 和修复后复审）统一使用 Paseo `provider=claude`、`model=claude-fable-5`、`thinkingOptionId=high`；不可用时停下报告，不静默降级
+- 本仓库所有 CodeStable review gate（含 design review、code review 和修复后复审）统一使用独立 Task agent，并使用当前模型的最高思考等级；`gpt-5.6-sol` 例外，固定用 `thinkingOptionId=xhigh`；reviewer 不可用时停下报告，不静默降级

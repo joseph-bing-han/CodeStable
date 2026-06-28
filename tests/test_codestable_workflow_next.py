@@ -160,11 +160,22 @@ def write_code_review(
     status: str = "passed",
     reviewer: str | None = "subagent",
     doc_type: str = "feature-review",
+    reviewer_state: str = "completed",
+    reviewer_ref: str = "d11e7d51-96da-488d-9fb5-2cb68c9e0e0e",
 ) -> None:
     reviewer_field = f"reviewer: {reviewer}\n" if reviewer is not None else ""
     write(
         feature / f"{slug}-review.md",
-        f"---\ndoc_type: {doc_type}\nstatus: {status}\n{reviewer_field}---\n# Review\n",
+        f"---\ndoc_type: {doc_type}\nfeature: {feature.name}\nstatus: {status}\n"
+        f"round: 1\n{reviewer_field}reviewer_state: {reviewer_state}\n"
+        f'reviewer_ref: "{reviewer_ref}"\n'
+        "reviewer_provider: openai\n"
+        "reviewer_model: gpt-5.6-sol\n"
+        "reviewer_reasoning: xhigh\n"
+        "reviewer_readonly: true\n"
+        f'task_generation_sha256: "{"0" * 64}"\n'
+        f'review_basis_sha256: "{"0" * 64}"\n'
+        "---\n# Review\n",
     )
 
 
@@ -2247,7 +2258,7 @@ def test_feature_standard_lane_rejects_reviewer_marker_outside_frontmatter(tmp_p
     assert result["next_action"] == "fix-feature-code-review-evidence"
 
 
-def test_feature_standard_lane_honors_explicit_self_review_fallback(
+def test_feature_standard_lane_rejects_self_review_fallback_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2259,8 +2270,8 @@ def test_feature_standard_lane_honors_explicit_self_review_fallback(
 
     result = workflow_next.feature_next(feature, epic_child_batch=False)
 
-    assert result["status"] == "continue"
-    assert result["next_action"] == "cs-feat --stage accept"
+    assert result["status"] == "blocked"
+    assert result["next_action"] == "fix-feature-code-review-evidence"
 
 
 def test_feature_execution_lane_is_normalized(tmp_path: Path) -> None:

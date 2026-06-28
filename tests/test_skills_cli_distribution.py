@@ -60,7 +60,7 @@ def package_skill_names(package_root: Path) -> set[str]:
 
 def skill_md_paths(root: Path) -> set[str]:
     tracked = subprocess.run(
-        ["git", "ls-files", "-z"],
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         cwd=root,
         check=True,
         capture_output=True,

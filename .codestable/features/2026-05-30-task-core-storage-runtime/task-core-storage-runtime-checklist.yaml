@@ -1,0 +1,40 @@
+feature: 2026-05-30-task-core-storage-runtime
+created: 2026-05-30
+
+steps:
+  - action: "文档骨架：创建 feature design、checklist 和 active task"
+    exit_signal: "feature 目录和 task list 存在，design 状态为 approved"
+    status: done
+
+  - action: "核心 skill：新增 cs-task/SKILL.md 和 cs-task/reference.md"
+    exit_signal: "cs-task 能独立说明发现、恢复、完成和归档协议"
+    status: done
+
+  - action: "入口和共享约定：更新 cs/SKILL.md 与 shared conventions"
+    exit_signal: "根入口能路由 task，onboard 共享模板包含 tasks 目录"
+    status: done
+
+  - action: "校验收尾：校验 YAML、检查文档行数和 lints"
+    exit_signal: "items/checklist YAML 校验通过，单个 md 不超过 300 行"
+    status: done
+
+checks:
+  - item: "cs/SKILL.md 明确把 task 恢复、继续任务、历史任务路由到 cs-task"
+    source: 挂载点
+    status: passed
+
+  - item: "cs-task/SKILL.md 定义 active、completed、archived task 的发现和处理流程"
+    source: 编排骨架
+    status: passed
+
+  - item: "cs-task/reference.md 定义 Task List schema、正文结构、状态机、归档命名和结构化询问规则"
+    source: 名词契约
+    status: passed
+
+  - item: "shared conventions 将 .codestable/tasks/active 与 .codestable/tasks/archived 列为正式目录"
+    source: 挂载点
+    status: passed
+
+  - item: "本 feature 不接入所有 skill 的 auto / ask 分级"
+    source: 范围守护
+    status: passed

@@ -16,6 +16,12 @@ contracts:
 
 动作前先跑 CodeStable preflight：读 `.codestable/attention.md`（缺失先 `cs-onboard`）；不要用 `AGENTS.md`/`CLAUDE.md` 等外部入口代替它；细则见 `.codestable/reference/execution-conventions.md`。
 
+### 本地 Task 与 Review spine
+
+`cs-issue` 是完整入口。report/analysis 完成并准备首次修改文档或代码前，必须自动创建或恢复 active Task；已有 issue 产物或代码但缺 Task 时先 `cs-task backfill`。修复阶段先完成分析确认范围内的完整修复批次并持续更新 Task，再统一进入 `cs-code-review`，不得每修一个现象就提前 review。
+
+`changes-requested` 时集中修复该 round 的全部 blocking/important findings，再统一复审。passed 后当前 run 继续 `cs-task complete` 和原子 archive；active 同名 Task 仍存在时不得 final answer。确定性的 report→analyze→fix→review→archive 全部在当前 run 自动推进，不要求用户输入下一条 `/cs-*`。
+
 `cs-issue` 是问题修复的唯一推荐入口，是一个 workflow skill：从仓库事实恢复当前阶段、加载对应阶段协议、在人工 checkpoint 停下。它把问题从记录、根因分析、定点修复、验证、fix-note 和 code review 衔接到闭环。真正的 report/analyze/fix 怎么做由各阶段 protocol 负责（见下方 Progressive Reference Loading）。
 
 旧阶段技能 `cs-issue-report`、`cs-issue-analyze`、`cs-issue-fix` 长期保留为兼容入口，只传入 `requested_stage`。

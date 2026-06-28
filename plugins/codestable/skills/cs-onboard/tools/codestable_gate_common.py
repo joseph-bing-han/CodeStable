@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -110,12 +111,54 @@ def load_yaml(path: Path) -> Any:
     return load_yaml_text(path.read_text(encoding="utf-8"))
 
 
+def validate_yaml_value(value: Any, path: str = "root") -> None:
+    if isinstance(value, dict):
+        for key, nested_value in value.items():
+            if type(key) is not str:
+                raise ValueError(f"YAML mapping key must be a string at {path}")
+            validate_yaml_value(nested_value, f"{path}.{key}")
+        return
+    if isinstance(value, list):
+        for index, nested_value in enumerate(value):
+            validate_yaml_value(nested_value, f"{path}[{index}]")
+        return
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"YAML contains a non-finite number at {path}")
+
+
 def load_yaml_text(text: str) -> Any:
     try:
         import yaml  # type: ignore
     except ImportError as error:
         raise RuntimeError("PyYAML is required for strict CodeStable gate artifact parsing") from error
-    parsed = yaml.safe_load(text)
+
+    class UniqueKeySafeLoader(yaml.SafeLoader):
+        pass
+
+    def construct_unique_mapping(
+        loader: UniqueKeySafeLoader,
+        node: yaml.nodes.MappingNode,
+        deep: bool = False,
+    ) -> dict[object, object]:
+        mapping: dict[object, object] = {}
+        for key_node, value_node in node.value:
+            key = loader.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise ValueError(f"YAML contains duplicate mapping key: {key}")
+            mapping[key] = loader.construct_object(value_node, deep=deep)
+        return mapping
+
+    UniqueKeySafeLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+        construct_unique_mapping,
+    )
+    try:
+        parsed = yaml.load(text, Loader=UniqueKeySafeLoader)
+    except ValueError:
+        raise
+    except yaml.YAMLError as error:
+        raise ValueError(f"YAML parsing failed: {error}") from error
+    validate_yaml_value(parsed)
     return {} if parsed is None else parsed
 
 

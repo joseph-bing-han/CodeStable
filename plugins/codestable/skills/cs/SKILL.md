@@ -90,6 +90,7 @@ Ambiguous (RouteChoice _)     -> HumanCheckpoint ClarifyRoute
 | canonical 决策、ADR、术语或 context 边界 | `cs-domain` |
 | 可复用经验、踩坑、调研结论 | `cs-keep` |
 | 一两行每次都要知道的 attention 规则 | `cs-note` |
+| 当前任务、继续任务、历史任务、补建或归档 Task | `cs-task` |
 | 多 feature 系统能力、epic、roadmap | `cs-epic` |
 | 本轮 diff / 合并前的 code review | `cs-code-review` |
 | CodeStable skill 跑偏、规则不清、工具失败 | `cs-feedback` |
@@ -128,6 +129,7 @@ Dispatch: continuing-current-run | recommendation-only
 - 生命周期：`cs-feat` 先做风险分级；Quick 走实现/验证/一次 review，Standard 在当前 run 走 design/impl/review/accept-inline，Goal 才走 goal 包、impl、code review、QA、accept 并可由可见 driver 长程执行；另有 `cs-issue`、`cs-refactor`、`cs-epic`。
 - 横切能力：`cs-code-review`、`cs-audit`、`cs-docs`、`cs-docs-neat`、`cs-feedback`。
 - 需求与知识：`cs-req`、`cs-domain`、`cs-keep`、`cs-note`。
+- 运行账本：`cs-task` 负责恢复、同步、完成和原子归档跨 workflow Task spine。
 - 启动与探索：`cs-onboard`、`cs-brainstorm`、`cs-goal`。
 
 主要产物位于 `.codestable/requirements/`、`roadmap/`、`goals/`、`features/`、`issues/`、`refactors/`、`audits/`、`brainstorms/`、`feedback/` 与 `compound/`。

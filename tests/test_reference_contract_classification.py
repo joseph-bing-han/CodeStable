@@ -51,6 +51,7 @@ HASKELL_CONTRACT_REFERENCES = {
 STRUCTURED_REFERENCES = {
     "cs-audit/reference.md",
     "cs-brainstorm/reference.md",
+    "cs-code-review/code-reviewer.md",
     "cs-code-review/references/report-template.md",
     "cs-docs-neat/references/agent-paths.md",
     "cs-docs-neat/references/sync-matrix.md",
@@ -73,10 +74,12 @@ STRUCTURED_REFERENCES = {
     "cs-onboard/references/spec-governance-tools.md",
     "cs-onboard/references/tools-context.md",
     "cs-onboard/references/tools.md",
+    "cs-onboard/references/local-override-workflow.md",
     "cs-refactor/references/library/methods-architecture.md",
     "cs-refactor/references/library/methods-l4.md",
     "cs-refactor/references/library/methods.md",
     "cs-refactor/references/library/scan-checklist-format.md",
+    "cs-task/reference.md",
 }
 
 

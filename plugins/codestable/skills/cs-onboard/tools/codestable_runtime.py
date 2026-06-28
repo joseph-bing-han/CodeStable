@@ -49,6 +49,10 @@ SKILL_TOOL_CAPABILITIES: dict[str, list[str]] = {
     ],
     "workflow-next": [
         "tools/codestable-workflow-next.py",
+        "tools/codestable-review-basis.py",
+    ],
+    "task-spine": [
+        "tools/codestable-task-runtime.py",
     ],
     "goal-gates": [
         "tools/codestable-scope-gate.py",
@@ -94,11 +98,24 @@ def read_manifest(root: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def git_dirty_managed_paths(root: Path) -> list[str]:
+def git_dirty_managed_paths(
+    root: Path,
+    allowed_untracked_paths: set[str] | None = None,
+) -> list[str]:
     if subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
         return []
+    allowed_untracked_paths = allowed_untracked_paths or set()
     result = subprocess.run(
-        ["git", "status", "--porcelain", "--", *MANAGED_PATHS],
+        [
+            "git",
+            "-c",
+            "core.quotepath=false",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--",
+            *MANAGED_PATHS,
+        ],
         cwd=root,
         text=True,
         stdout=subprocess.PIPE,
@@ -108,8 +125,11 @@ def git_dirty_managed_paths(root: Path) -> list[str]:
     dirty: list[str] = []
     for line in result.stdout.splitlines():
         if line:
+            status = line[:2]
             path = line[3:].strip('"')
             if path in PRESERVED_LEGACY_RUNTIME_PATHS:
+                continue
+            if status == "??" and path in allowed_untracked_paths:
                 continue
             dirty.append(path)
     return dirty
@@ -359,7 +379,11 @@ def sync_runtime(root: Path, source_skill_dir: Path, plugin_version: str | None 
             "missing_source_assets": missing_source_assets,
             "hint": "Reinstall or update cs-onboard; the installed skill package is missing runtime source assets.",
         }
-    dirty = git_dirty_managed_paths(root)
+    target_only_paths = runtime_target_only_paths(root, source_skill_dir)
+    dirty = git_dirty_managed_paths(
+        root,
+        allowed_untracked_paths=set(target_only_paths),
+    )
     if dirty and not force:
         return {
             "ok": False,

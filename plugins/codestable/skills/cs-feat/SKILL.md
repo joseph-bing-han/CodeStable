@@ -20,7 +20,7 @@ contracts:
 ## 启动必读
 
 动作前先跑 CodeStable preflight：读 `.codestable/attention.md`（缺失先 `cs-onboard`）；不要用 `AGENTS.md`/`CLAUDE.md` 等外部入口代替它；细则见 `.codestable/reference/execution-conventions.md`。
-
+`cs-feat` 是完整入口。结束分析并准备首次落盘 design、ff-note 或代码前，必须自动创建或恢复 active Task；Task 创建属于机械 gate，不询问是否接入。每个可观察实现批次完成后先更新 Task，再继续剩余 checklist。只有当前 design/checklist/Quick 范围全部实现并验证后，才统一进入 `cs-code-review`；不得在计划内实现仍有 pending 项时提前 review。`changes-requested` 时集中修复该 round 的全部 blocking/important findings，再统一复审。review、QA/accept-inline 或 acceptance 通过后，当前 run 必须继续 `cs-task complete` 与原子 archive；active 同名 Task 仍存在时不得 final answer。明确的下一阶段始终在当前 run 继续，不要求用户重新输入 `/cs-*`。
 `cs-feat` 是 feature 的唯一推荐入口。它先按任务事实选择执行 lane，再从仓库事实恢复阶段：Quick 直接实现；Standard 在当前 run 完成 design、implementation、review 和 accept-inline；Goal 才生成 goal package 并尝试通过可见 Task agent goal driver 长程执行。Standard / Goal 仍在 design gate 停下来等用户确认。真正的各阶段动作由对应 protocol 负责（见 Progressive Reference Loading）。
 
 ## 入口意图

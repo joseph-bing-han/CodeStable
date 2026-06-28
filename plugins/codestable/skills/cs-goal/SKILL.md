@@ -24,6 +24,10 @@ iteration 中创建或引用对应 feature / issue / refactor 产物。
 
 产物模板、`state.yaml` schema、报告标题和恢复规则见 `reference.md`。
 
+### 本地 Task 与 Review spine
+
+Goal driver 必须恢复 parent/feature active Task，并在每个可观察批次后先更新 Task。实施阶段必须完成当前 feature 的完整 checklist 批次后再进入 `cs-code-review`；findings 集中修复并统一复审。Goal complete 只表示执行目标完成，最终退出前仍需完成 required acceptance 并原子归档对应 Task。
+
 `cs-goal` 是 goal driver（单一职责，非 stage 编排型 workflow）；下方 `## Spec` 是前门契约，正文阶段 1/2/3、owner-stop、complete/blocked 规则是方法论主体。
 
 ## Spec

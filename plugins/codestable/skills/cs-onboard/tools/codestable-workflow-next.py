@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,13 @@ from codestable_gate_common import (
     named_approval_group_state,
     named_authorization_state,
 )
-from codestable_common import SUBAGENT_REVIEWERS, review_has_subagent_evidence
+from codestable_common import (
+    CANONICAL_REVIEWERS,
+    LEGACY_READABLE_REVIEWERS,
+    review_evidence_matches_repository,
+    review_has_canonical_evidence,
+    workflow_family,
+)
 
 
 NON_BLOCKING_STATUSES = {
@@ -34,7 +41,6 @@ NON_BLOCKING_STATUSES = {
     "dispatch_goal",
     "complete",
 }
-REVIEW_FALLBACK_REVIEWERS = {"ocr", "self"}
 VALID_EXECUTION_LANES = {"quick", "standard", "goal"}
 VALID_INDEPENDENT_REVIEW_STATES = {
     "passed",
@@ -68,13 +74,13 @@ def frontmatter(path: Path) -> dict[str, Any]:
         text = path.read_text(encoding="utf-8")
     except Exception as exc:
         raise ArtifactParseError(path, exc) from exc
-    if not text.startswith("---"):
+    if not text.startswith("---\n"):
         return {}
-    end = text.find("\n---", 3)
-    if end == -1:
+    match = re.match(r"\A---\n(?P<frontmatter>.*?)\n---(?:\n|\Z)", text, re.DOTALL)
+    if match is None:
         return {}
     try:
-        parsed = load_yaml_text(text[3:end].strip())
+        parsed = load_yaml_text(match.group("frontmatter"))
     except Exception as exc:
         raise ArtifactParseError(path, exc) from exc
     return parsed if isinstance(parsed, dict) else {}
@@ -175,12 +181,48 @@ def feature_design_review_state(path: Path | None) -> tuple[str, str, str]:
 
 
 def review_gate_passed(path: Path | None, meta: dict[str, Any]) -> bool:
+    """Return True only for canonical independent Task agent reviewer evidence.
+
+    Historical ``subagent+ocr`` reports are readable for back-compat reasons,
+    but new reports must use ``reviewer: subagent`` to pass the gate. A legacy
+    report that surfaces here is flagged so the workflow re-runs review.
+
+    When the unit still has an active Task (i.e. the batch is live, not yet
+    archived), the review's ``task_generation_sha256`` / ``review_basis_sha256``
+    must additionally match the current repository content. This closes the
+    stale/forged-evidence gap: a review whose SHA fields are merely well-formed
+    but do not bind the current Task and implementation basis must not pass, and
+    a review that predates a later implementation change must be re-run. Units
+    whose Task is already archived keep passing on canonical evidence alone so
+    closed-loop history is not retroactively invalidated.
+    """
     if path is None:
         return False
     reviewer = str(meta.get("reviewer") or "").strip().lower()
-    if reviewer in SUBAGENT_REVIEWERS and review_has_subagent_evidence(path):
-        return True
-    return os.environ.get("CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK") == "1" and reviewer in REVIEW_FALLBACK_REVIEWERS
+    if reviewer in LEGACY_READABLE_REVIEWERS:
+        return False
+    if reviewer not in CANONICAL_REVIEWERS:
+        return False
+    if not review_has_canonical_evidence(path):
+        return False
+    if review_unit_has_active_task(path):
+        return review_evidence_matches_repository(path)
+    return True
+
+
+def review_unit_has_active_task(path: Path) -> bool:
+    """Return True when the review's unit still has an active Task file.
+
+    The review path is ``<root>/.codestable/<unit-root>/<unit-dir>/<slug>-review.md``.
+    The active Task lives at ``<root>/.codestable/tasks/active/<slug>.md`` using
+    the date-stripped unit slug, matching ``review_evidence_matches_repository``.
+    """
+    try:
+        root = path.parent.parent.parent.parent
+    except (AttributeError, IndexError):
+        return False
+    task_slug = unit_slug_from_dir(path.parent)
+    return (root / ".codestable" / "tasks" / "active" / f"{task_slug}.md").is_file()
 
 
 def authorization_state(
@@ -193,8 +235,19 @@ def authorization_state(
 
 
 def feature_slug_from_dir(feature: Path) -> str:
-    match = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", feature.name)
-    return match.group(1) if match else feature.name
+    return unit_slug_from_dir(feature)
+
+
+def unit_slug_from_dir(unit_dir: Path) -> str:
+    """Strip the leading ``YYYY-MM-DD-`` date prefix from any unit directory.
+
+    Feature, issue and refactor unit directories share the same
+    ``YYYY-MM-DD-{slug}`` naming. Task files use the stripped slug, so the
+    archive gate must apply the same rule to every workflow instead of only
+    features. Returns the directory name unchanged when no date prefix matches.
+    """
+    match = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", unit_dir.name)
+    return match.group(1) if match else unit_dir.name
 
 
 def decision(
@@ -421,7 +474,7 @@ def standard_feature_next(
             status="blocked",
             next_action="fix-feature-code-review-evidence",
             reason="passed code review lacks independent Task agent evidence",
-            blocking=["passed code review must have reviewer: subagent or subagent+ocr"],
+            blocking=["passed code review must have independent Task agent evidence"],
             evidence=evidence,
         )
     if qa is not None and qa_meta.get("doc_type") != "feature-qa":
@@ -557,7 +610,7 @@ def quick_feature_next(
             status="blocked",
             next_action="fix-feature-code-review-evidence",
             reason="passed Quick review lacks independent Task agent evidence",
-            blocking=["passed code review must have reviewer: subagent or subagent+ocr"],
+            blocking=["passed code review must have independent Task agent evidence"],
             evidence=evidence,
         )
     return decision(
@@ -1965,6 +2018,363 @@ def feature_next(
         return artifact_parse_decision("feature", feature, error)
 
 
+FINAL_TASK_OWNERS = {
+    "feature": frozenset({"cs-feat", "cs-feat-accept"}),
+    "issue": frozenset({"cs-issue"}),
+    "refactor": frozenset({"cs-refactor"}),
+}
+
+
+def archive_task_binding_findings(
+    result: dict[str, Any],
+    target: Path,
+    inspection: dict[str, Any],
+) -> list[str]:
+    """Bind a verified archive to the completed workflow it is exiting for.
+
+    The archived Task must belong to the same workflow family, carry the
+    terminal ``archived`` status, and be owned by a skill that can finalize
+    that workflow. These three facts close cross-workflow and cross-unit
+    archive spoofing without over-coupling the gate to a specific set of
+    evidence documents (the unit-level ``*_next`` resolver already enforces
+    that the workflow evidence is complete before ``status`` becomes
+    ``complete``).
+    """
+    workflow = str(result.get("workflow") or "")
+    findings: list[str] = []
+    archived_workflow = str(inspection.get("workflow") or "")
+    if workflow_family(archived_workflow) != workflow_family(workflow):
+        findings.append(
+            f"archived Task workflow {archived_workflow!r} does not match {workflow!r}"
+        )
+    if inspection.get("task_status") != "archived":
+        findings.append("archived Task metadata must report status: archived")
+    owner_skill = str(inspection.get("owner_skill") or "")
+    if owner_skill not in FINAL_TASK_OWNERS.get(workflow, frozenset()):
+        findings.append(
+            f"archived Task owner_skill {owner_skill!r} is not a final owner for {workflow}"
+        )
+    return findings
+
+
+def enforce_task_archive_gate(result: dict[str, Any], target: Path) -> dict[str, Any]:
+    """Prevent a completed workflow from exiting before its Task is archived."""
+    if result.get("status") != "complete":
+        return result
+
+    root = project_root(target)
+    task = unit_slug_from_dir(target)
+    active_path = root / ".codestable/tasks/active" / f"{task}.md"
+    inspection_command = [
+        sys.executable,
+        str(Path(__file__).resolve().with_name("codestable-task-runtime.py")),
+        "--root",
+        str(root),
+        "inspect",
+        "--task",
+        task,
+    ]
+    inspection_process = subprocess.run(
+        inspection_command,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    try:
+        inspection = json.loads(inspection_process.stdout)
+    except json.JSONDecodeError:
+        inspection = {
+            "ok": False,
+            "state": "invalid",
+            "findings": [
+                {
+                    "code": "archive-inspection-failed",
+                    "message": inspection_process.stderr.strip() or "Task archive inspection returned invalid JSON",
+                    "path": ".codestable/tasks",
+                }
+            ],
+        }
+
+    if inspection.get("ok") is True and inspection.get("state") in {"valid", "historical"}:
+        binding_findings = archive_task_binding_findings(result, target, inspection)
+        if not binding_findings:
+            return result
+        return decision(
+            workflow=str(result.get("workflow") or "workflow"),
+            status="blocked",
+            next_action="resolve-task-workflow-binding",
+            reason="archived Task is valid but is not bound to the completed workflow evidence",
+            blocking=binding_findings,
+            evidence={
+                **dict(result.get("evidence") or {}),
+                "task": task,
+                "archive_inspection": inspection,
+            },
+        )
+
+    inspection_state = str(inspection.get("state") or "invalid")
+    inspection_findings = inspection.get("findings")
+    finding_rows = inspection_findings if isinstance(inspection_findings, list) else []
+    if inspection_state == "active" and active_path.exists():
+        active_status = "missing"
+        for line in active_path.read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.partition(":")
+            if separator and key.strip() == "status":
+                active_status = value.strip().strip('"\'').lower()
+                break
+        next_action = "cs-task archive" if active_status in {"completed", "cancelled"} else "cs-task complete"
+        reason = f"workflow evidence is complete but active Task status is {active_status}"
+    elif inspection_state == "missing":
+        next_action = "cs-task backfill"
+        reason = "workflow evidence is complete but no matching Task spine exists"
+    else:
+        blocking = [
+            f"{row.get('code', 'archive-integrity-failed')}: {row.get('message', 'invalid archive evidence')}"
+            for row in finding_rows
+            if isinstance(row, dict)
+        ]
+        return decision(
+            workflow=str(result.get("workflow") or "workflow"),
+            status="blocked",
+            next_action="resolve-task-archive-integrity",
+            reason="workflow evidence is complete but archived Task evidence is invalid",
+            blocking=blocking or ["Task archive inspection failed without structured findings"],
+            evidence={
+                **dict(result.get("evidence") or {}),
+                "task": task,
+                "archive_inspection": inspection,
+            },
+        )
+
+    return decision(
+        workflow=str(result.get("workflow") or "workflow"),
+        status="continue",
+        next_action=next_action,
+        reason=reason,
+        missing_artifacts=[] if active_path.exists() else [f".codestable/tasks/active/{task}.md"],
+        evidence={**dict(result.get("evidence") or {}), "task": task},
+    )
+
+
+def completed_unit_result(workflow: str, target: Path) -> dict[str, Any]:
+    return decision(
+        workflow=workflow,
+        status="complete",
+        next_action=f"CS_{workflow.upper()}_COMPLETE",
+        reason=f"{workflow} workflow evidence is complete",
+        evidence={"unit_dir": rel(project_root(target), target)},
+    )
+
+
+def unit_artifact_matches(
+    path: Path,
+    *,
+    doc_type: str,
+    identity_field: str,
+    unit: Path,
+    allowed_statuses: frozenset[str] | None = None,
+) -> bool:
+    meta = frontmatter(path)
+    identity = str(meta.get(identity_field) or "")
+    return (
+        meta.get("doc_type") == doc_type
+        and identity in {unit.name, unit_slug_from_dir(unit)}
+        and (
+            allowed_statuses is None
+            or type(meta.get("status")) is str
+            and meta.get("status") in allowed_statuses
+        )
+    )
+
+
+def issue_next(issue: Path) -> dict[str, Any]:
+    root = project_root(issue)
+    slug = unit_slug_from_dir(issue)
+    report = first_existing(issue / f"{slug}-report.md")
+    analysis = first_existing(issue / f"{slug}-analysis.md")
+    fix_note = first_existing(issue / f"{slug}-fix-note.md")
+    review = first_existing(issue / f"{slug}-review.md")
+    evidence = {
+        "unit_dir": rel(root, issue),
+        "report": rel(root, report),
+        "analysis": rel(root, analysis),
+        "fix_note": rel(root, fix_note),
+        "code_review": rel(root, review),
+    }
+    required_artifacts = (
+        (report, "issue-report", "cs-issue --stage report", f"{slug}-report.md"),
+        (analysis, "issue-analysis", "cs-issue --stage analyze", f"{slug}-analysis.md"),
+        (fix_note, "issue-fix", "cs-issue --stage fix", f"{slug}-fix-note.md"),
+    )
+    for artifact, expected_doc_type, next_action, filename in required_artifacts:
+        if artifact is None:
+            return decision(
+                workflow="issue",
+                status="continue",
+                next_action=next_action,
+                reason=f"issue workflow evidence is missing: {filename}",
+                missing_artifacts=[filename],
+                evidence=evidence,
+            )
+        if not unit_artifact_matches(
+            artifact,
+            doc_type=expected_doc_type,
+            identity_field="issue",
+            unit=issue,
+            allowed_statuses=frozenset({"confirmed"}),
+        ):
+            return decision(
+                workflow="issue",
+                status="blocked",
+                next_action="fix-issue-workflow-evidence",
+                reason=f"issue workflow evidence is invalid: {filename}",
+                blocking=[f"{filename} must match the issue unit identity and doc_type"],
+                evidence=evidence,
+            )
+    if review is None:
+        return decision(
+            workflow="issue",
+            status="continue",
+            next_action="cs-code-review",
+            reason="issue implementation evidence is complete but code review is missing",
+            missing_artifacts=[f"{slug}-review.md"],
+            evidence=evidence,
+        )
+    review_status = str(frontmatter(review).get("status") or "missing")
+    if review_status == "changes-requested":
+        return decision(
+            workflow="issue",
+            status="continue",
+            next_action="cs-issue --stage fix review-fix",
+            reason="issue code review requested changes",
+            evidence=evidence,
+        )
+    if review_status != "passed" or not review_gate_passed(review, frontmatter(review)):
+        return decision(
+            workflow="issue",
+            status="blocked",
+            next_action="fix-issue-code-review-evidence",
+            reason="issue code review evidence is not canonical",
+            blocking=["passed issue review must include completed independent reviewer lifecycle evidence"],
+            evidence=evidence,
+        )
+    return completed_unit_result("issue", issue)
+
+
+def refactor_next(refactor: Path) -> dict[str, Any]:
+    root = project_root(refactor)
+    slug = unit_slug_from_dir(refactor)
+    design = first_existing(refactor / f"{slug}-refactor-design.md")
+    checklist = first_existing(refactor / f"{slug}-checklist.yaml")
+    apply_notes = first_existing(refactor / f"{slug}-apply-notes.md")
+    review = first_existing(refactor / f"{slug}-review.md")
+    evidence = {
+        "unit_dir": rel(root, refactor),
+        "design": rel(root, design),
+        "checklist": rel(root, checklist),
+        "apply_notes": rel(root, apply_notes),
+        "code_review": rel(root, review),
+    }
+    if design is None:
+        return decision(
+            workflow="refactor",
+            status="continue",
+            next_action="cs-refactor --stage design",
+            reason="refactor design evidence is missing",
+            missing_artifacts=[f"{slug}-design.md"],
+            evidence=evidence,
+        )
+    if not unit_artifact_matches(
+        design,
+        doc_type="refactor-design",
+        identity_field="refactor",
+        unit=refactor,
+        allowed_statuses=frozenset({"approved"}),
+    ):
+        return decision(
+            workflow="refactor",
+            status="blocked",
+            next_action="fix-refactor-design-evidence",
+            reason="refactor design evidence is invalid",
+            blocking=["refactor design must be approved and match the unit identity and doc_type"],
+            evidence=evidence,
+        )
+    checklist_data = load_yaml_artifact(checklist) if checklist is not None else None
+    checklist_identity = (
+        str(checklist_data.get("refactor") or "")
+        if isinstance(checklist_data, dict)
+        else ""
+    )
+    checklist_matches = bool(
+        checklist is not None
+        and isinstance(checklist_data, dict)
+        and checklist_identity in {refactor.name, slug}
+        and all_checklist_steps_done(checklist)
+    )
+    if not checklist_matches:
+        return decision(
+            workflow="refactor",
+            status="continue",
+            next_action="cs-refactor --stage apply",
+            reason="refactor checklist is missing, belongs to another unit, or has pending steps",
+            missing_artifacts=[] if checklist is not None else [f"{slug}-checklist.yaml"],
+            evidence=evidence,
+        )
+    if apply_notes is None:
+        return decision(
+            workflow="refactor",
+            status="continue",
+            next_action="cs-refactor --stage apply",
+            reason="refactor apply-notes evidence is missing",
+            missing_artifacts=[f"{slug}-apply-notes.md"],
+            evidence=evidence,
+        )
+    if not unit_artifact_matches(
+        apply_notes,
+        doc_type="refactor-apply-notes",
+        identity_field="refactor",
+        unit=refactor,
+        allowed_statuses=frozenset({"completed"}),
+    ):
+        return decision(
+            workflow="refactor",
+            status="blocked",
+            next_action="fix-refactor-apply-evidence",
+            reason="refactor apply-notes evidence is invalid",
+            blocking=["apply-notes must match the refactor unit identity and doc_type"],
+            evidence=evidence,
+        )
+    if review is None:
+        return decision(
+            workflow="refactor",
+            status="continue",
+            next_action="cs-code-review",
+            reason="refactor implementation evidence is complete but code review is missing",
+            missing_artifacts=[f"{slug}-review.md"],
+            evidence=evidence,
+        )
+    review_status = str(frontmatter(review).get("status") or "missing")
+    if review_status == "changes-requested":
+        return decision(
+            workflow="refactor",
+            status="continue",
+            next_action="cs-refactor --stage apply review-fix",
+            reason="refactor code review requested changes",
+            evidence=evidence,
+        )
+    if review_status != "passed" or not review_gate_passed(review, frontmatter(review)):
+        return decision(
+            workflow="refactor",
+            status="blocked",
+            next_action="fix-refactor-code-review-evidence",
+            reason="refactor code review evidence is not canonical",
+            blocking=["passed refactor review must include completed independent reviewer lifecycle evidence"],
+            evidence=evidence,
+        )
+    return completed_unit_result("refactor", refactor)
+
+
 def print_human(result: dict[str, Any]) -> None:
     print(f"{result['workflow']} next: {result['status']} -> {result['next_action']}")
     print(result["reason"])
@@ -1991,15 +2401,39 @@ def main() -> int:
     )
     feature_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
 
+    unit_parser = subparsers.add_parser(
+        "unit",
+        help="Apply the final Task archive gate to a completed issue or refactor unit",
+    )
+    unit_parser.add_argument("--workflow", required=True, choices=("issue", "refactor"))
+    unit_parser.add_argument("--unit", required=True, help="Issue or refactor unit directory")
+    unit_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+
     args = parser.parse_args()
     if args.command == "epic":
-        result = epic_next(Path(args.roadmap))
-    else:
-        result = feature_next(
-            Path(args.feature),
-            args.epic_child_batch,
-            args.require_implementation_ready,
+        target = Path(args.roadmap)
+        result = enforce_task_archive_gate(epic_next(target), target)
+    elif args.command == "feature":
+        target = Path(args.feature)
+        result = enforce_task_archive_gate(
+            feature_next(
+                target,
+                args.epic_child_batch,
+                args.require_implementation_ready,
+            ),
+            target,
         )
+    else:
+        target = Path(args.unit)
+        try:
+            unit_result = (
+                issue_next(target)
+                if args.workflow == "issue"
+                else refactor_next(target)
+            )
+        except ArtifactParseError as error:
+            unit_result = artifact_parse_decision(args.workflow, target, error)
+        result = enforce_task_archive_gate(unit_result, target)
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

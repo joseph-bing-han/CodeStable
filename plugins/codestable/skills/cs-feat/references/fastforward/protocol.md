@@ -66,7 +66,7 @@ fastforward 直接按当前检出环境改项目源码；CodeStable 不决定分
 
 ff-note 落盘、收尾提交前做首次独立代码审查；`blocking` / `important` 未清零不算完成。需要 commit 时按仓库既有提交规范或 owner 指示执行。
 
-断点恢复以 ff-note + review 为准：没有 ff-note 就继续 Quick 实现；ff-note 已有但 review 缺失/blocked 就回 `cs-code-review`；`changes-requested` 时读取 findings 做窄 review-fix、更新 ff-note 验证记录，再回 review；只有 `reviewer: subagent|subagent+ocr` 的 passed review 才打印 `CS_FEATURE_QUICK_COMPLETE`。已有 design 的显式降级必须先按 `cs-feat` 主契约持久化 `execution_lane: quick`，不能只生成 ff-note。
+断点恢复以 ff-note + review 为准：没有 ff-note 就继续完成整个 Quick 实现批次；ff-note 已有但 review 缺失/blocked 就回 `cs-code-review`；`changes-requested` 时先集中修复本轮全部 blocking/important findings、更新 ff-note 验证记录，再统一复审；只有带独立 Task agent 证据的 passed review 才打印 `CS_FEATURE_QUICK_COMPLETE`。新报告固定写 `reviewer: subagent`；历史 `subagent+ocr` 只作旧证据兼容。已有 design 的显式降级必须先按 `cs-feat` 主契约持久化 `execution_lane: quick`，不能只生成 ff-note。
 
 ---
 

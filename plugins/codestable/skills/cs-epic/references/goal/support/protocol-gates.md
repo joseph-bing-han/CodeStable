@@ -82,7 +82,7 @@ maySkip core reason = not core && isJust reason
 
 - review 基于当前 diff。
 - review `status=passed`。
-- review 必须由独立 Task agent reviewer 完成；frontmatter `reviewer: subagent` 或 `subagent+ocr` 是默认放行锚点。`reviewer: ocr` / `self` 只能作为用户显式降级 fallback，不能静默通过。
+- review 必须由独立 Task agent reviewer 完成；新报告的 frontmatter 固定写 `reviewer: subagent`。历史 `subagent+ocr` 只作旧证据兼容；`reviewer: self` 或无独立 reviewer 证据不得放行。
 - 无 unresolved blocking。
 - review 明确消费 evidence pack 和 gate results。
 - high-risk provider warnings 已解释或交给 QA。

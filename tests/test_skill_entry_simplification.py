@@ -106,7 +106,10 @@ LEGACY_ROUTING_PHRASES = [
 
 
 def load_codestable_common():
-    module_path = SKILLS / "cs-onboard/tools/codestable_common.py"
+    tools_dir = SKILLS / "cs-onboard/tools"
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    module_path = tools_dir / "codestable_common.py"
     spec = importlib.util.spec_from_file_location("codestable_common", module_path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

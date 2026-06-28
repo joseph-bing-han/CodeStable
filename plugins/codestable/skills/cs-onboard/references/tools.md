@@ -169,7 +169,63 @@ python3 <cs-onboard skill 目录>/tools/build-review-packet.py --root . --unit .
 
 ---
 
-## 6. Context / Commit Tools
+## 6. Subagent Runtime Mapping
+
+当 CodeStable 技能里出现 `Task tool`、`Task agent`、`named reviewer agent` 这类写法时，先把它理解成**逻辑派发合约**，不要默认当前 runtime 真的暴露了一个字面叫 `Task` 的工具。
+
+只复制提示词而不复制运行时映射，属于不完整移植。
+
+### 命名 reviewer 合约
+
+CodeStable 的 Cursor 插件审核 agent 使用无冲突的 hyphen 名称，并在 agent frontmatter 固定高思考预算。当前 code review gate 的映射：
+
+- `cs-code-review` → `codestable-code-reviewer`（定义见 `plugins/codestable/agents/code-reviewer.md`）
+
+reviewer 的目标模型档位是**当前对话主模型的最高思考等级**（例如 Opus 4.8 用 `max`，`gpt-5.6-sol` 用 `xhigh`），不是任何 Fast 或轻量预设。在 Codex / Cursor 风格 runtime 中，按以下顺序执行：
+
+1. 如果 runtime 能显式启动 Cursor 自定义 subagent，优先使用 `codestable-code-reviewer`。不要调用 `codestable:code-reviewer` 冒号形式；它只是旧逻辑合约名，不是当前 Cursor 默认可执行名。该 custom subagent 无 `model:` 字段、依赖继承当前对话主模型；若 runtime 无法保证它继承当前主模型（可能落到某个默认固定模型），不得直接采信其结果，退回步骤 2 的 model-safe 判定。
+2. 如果 runtime 无法显式启动该 custom subagent，但只暴露原生 `Subagent` / 通用 subagent 能力，则读取：
+   - `plugins/codestable/agents/code-reviewer.md`（reviewer role prompt）
+   - `cs-code-review` skill 的 `code-reviewer.md` 本地 review task 模板
+   把 role prompt 与填好占位符的 task body 合并后，使用 `readonly: true` 的 `generalPurpose` subagent 发起独立审查。
+3. 如果 runtime 支持 subagent 模型 / 思考档选择，native bridge 必须显式请求当前主模型的最高思考等级（Opus 4.8 → `max`，`gpt-5.6-sol` → `xhigh`）；`.codestable/attention.md` 显式 pin 了 provider/model 时以 attention 为准。
+4. 如果 runtime 不支持模型 / 思考档选择，只有在 runtime 明确保证未指定模型的通用 subagent 继承当前主模型时，才允许省略 model 启动 bridge，并记录 `parent_model_inherited`；此时仍必须请求该模型可用的最高思考档。
+5. 无法固定目标模型最高档、也不能保证父模型继承时，必须由当前主模型 self review。禁止把 actual model / `unknown` 仅记为 residual risk 后继续把 bridge 结果当 reviewer evidence。
+6. 禁止用 `Explore` / `explorer`、Fast 模型预设或 `model: fast` 冒充 reviewer fallback；这类预设会把 review 降级到低思考档的异构模型，属于 fail-closed 违规。
+
+### 通用 Task agent 合约
+
+- `Task tool (general-purpose)`：映射为原生 `generalPurpose` subagent，并显式写清任务目标、输出格式、是否只读。
+- 多个 Task 并行：映射为多个原生 subagent 并行发起，但前提是工作切片互不踩写、结果可安全合并。
+- Task 返回结果：主线程负责等待、核验、归并；subagent 输出是证据，不是自动 verdict。
+
+### Message framing
+
+当 runtime 没有命名 agent registry 时，native bridge 的 message 至少应采用这种结构：
+
+```text
+Your task is to perform the following. Follow the instructions below exactly.
+
+<agent-instructions>
+[role prompt content]
+</agent-instructions>
+
+<task-instructions>
+[filled task template content]
+</task-instructions>
+
+Execute this now. Output ONLY the structured response requested above.
+```
+
+关键点：
+
+- 用 task-delegation framing，不要只写泛泛的“帮我看下”。
+- role prompt 与 task body 分开包裹，减少上下文污染。
+- 明确输出格式，防止 subagent 只复述指令。
+
+---
+
+## 7. Context / Commit Tools
 
 For these tools, see `.codestable/reference/tools-context.md`:
 

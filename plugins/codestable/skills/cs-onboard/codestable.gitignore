@@ -4,3 +4,4 @@ feedback/*/*-report.md
 feedback/*/evidence.json
 feedback/*/triage.json
 feedback/*/regression-candidate.json
+tasks/locks/

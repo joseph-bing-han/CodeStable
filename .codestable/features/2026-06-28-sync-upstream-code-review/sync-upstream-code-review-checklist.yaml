@@ -1,0 +1,57 @@
+feature: 2026-06-28-sync-upstream-code-review
+created: 2026-06-28
+
+steps:
+  - action: "Git 安全骨架：fetch upstream，创建 sync 分支并记录本地 overlay 候选提交"
+    exit_signal: "sync 分支存在，git status 可证明 main 未被直接污染"
+    status: done
+  - action: "Upstream-first rebase：执行 rebase，冲突处保留 upstream 内容"
+    exit_signal: "工作树成功落在 upstream 主体之上，冲突文件没有混合旧 custom review 本体"
+    status: done
+  - action: "Overlay patch 重放：把 cs-task 与自动化闭环作为独立增量补回"
+    exit_signal: "git diff upstream/main..HEAD 能清楚显示本地增量边界"
+    status: done
+  - action: "自动门禁校准：逐个更新 feature / issue / refactor / fastforward 收尾 skill"
+    exit_signal: "所有收尾路径都明确进入 upstream 原生 cs-code-review，并能回填 / 归档 Task"
+    status: done
+  - action: "Onboard 与共享口径同步：更新新项目模板和体系总览"
+    exit_signal: "cs-onboard/reference 与根技能描述没有旧结构残留"
+    status: done
+  - action: "验证与验收：搜索残留、检查 Markdown 行数、校验 YAML，产出 acceptance"
+    exit_signal: "无阻塞残留，feature 可进入 cs-code-review"
+    status: done
+
+checks:
+  - item: "cs-code-review 目录结构包含 upstream 原生 agents、references、scripts，旧 reference.md 不再作为权威模板"
+    source: 名词契约
+    status: passed
+  - item: "rebase 冲突处默认保留 upstream 内容，本地功能只通过 overlay 增量重新出现"
+    source: 流程级约束
+    status: passed
+  - item: "标准 feature acceptance 完成后进入 cs-code-review，review 通过前不进入 commit / PR / merge"
+    source: 编排骨架
+    status: passed
+  - item: "入口、分析、文档落地、创建 Task、执行、回填 Task、Codex / cs-code-review review、Task 归档均有清晰协议"
+    source: 验收场景
+    status: passed
+  - item: "feature fastforward、issue fix、refactor 收尾均能找到进入 cs-code-review 的自动门禁描述"
+    source: 挂载点
+    status: passed
+  - item: "新项目 onboard 模板中的 code review / task spine 路径与当前结构一致"
+    source: 验收场景
+    status: passed
+  - item: "git diff upstream/main..HEAD 和可选 format-patch 能解释本地 overlay 边界"
+    source: 验收场景
+    status: passed
+  - item: "不存在两套并列的 code review 本体描述"
+    source: 范围守护
+    status: passed
+  - item: "没有把 upstream 的 cs-code-review 复制到其他流程 skill 内部"
+    source: 范围守护
+    status: passed
+  - item: "没有删除本地 Task 账本语义"
+    source: 范围守护
+    status: passed
+  - item: "没有为了保留本地能力而覆盖 upstream 主体实现"
+    source: 范围守护
+    status: passed

@@ -22,6 +22,8 @@ contracts:
 
 `cs-audit` 是仓库级只读投查 driver（单一职责，非 stage 编排型 workflow）；下方 `## Spec` 是前门契约，正文「## 工作流」的 Phase 1-4、维度矩阵与守护规则是方法论主体。
 
+`cs-audit` 本身只读，不为纯扫描强制创建 Task。owner 选定 finding 并自动转入 `cs-issue` / `cs-refactor` / `cs-feat` 后，从目标 workflow 首次落盘前开始强制 Task spine；目标入口负责自动推进实现批次、独立 review、修复复审和原子归档，不要求用户再次输入 `/cs-*`。
+
 ## Spec
 
 ```haskell

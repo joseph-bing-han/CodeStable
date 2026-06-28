@@ -1,0 +1,99 @@
+feature: 2026-07-16-cursor-plugin-v104-hardening
+created: 2026-07-16
+
+steps:
+  - action: "Cursor 分发合同：补齐 marketplace/plugin identity、source 可达性和 manifest 关系校验"
+    exit_signal: "当前合法 manifests 通过；entry name、plugin name、name mismatch、source 不存在和 manifest 缺失均返回精确 Finding"
+    status: done
+  - action: "防回归证据：增加 Cursor 合同负向测试和独立版本同步测试"
+    exit_signal: "定向 pytest 覆盖所有审计变异场景，且原有 Codex、Claude、skills-only 测试继续通过"
+    status: done
+  - action: "用户安装入口：补齐中文和英文 Cursor marketplace 安装与升级说明"
+    exit_signal: "README.md 与 README.en.md 均包含经当前官方事实核验的 Cursor 入口，且文档守卫能检测入口缺失"
+    status: done
+  - action: "v1.0.4 runtime 安全清理：区分 target-only untracked stale asset 与用户 managed modification，并使用无 --force 的 runtime sync 清理"
+    exit_signal: "clean tracked 与 untracked target-only stale asset 均被精确删除；staged/modified target-only、source-backed dirty asset 和其他 managed dirty 仍阻塞；legacy/history 前后不变；二次 check status=ok"
+    status: done
+  - action: "Requirement delta：把 Cursor 纳入 plugin-market-distribution 的跨宿主能力范围并取得 owner approval"
+    exit_signal: "delta 仅扩展 Cursor 用户故事和解决方案，既有边界与第一版实现记录保持不变"
+    status: done
+  - action: "集成验证：分别验证叠加 scoped diff 的 Git-aware 隔离候选和当前主工作区"
+    exit_signal: "隔离候选包含本 feature 全部实现 diff，且 package checker/runtime health 通过；当前工作区的正式 tests、runtime health 和 git diff --check 通过"
+    status: done
+checks:
+  - item: "Cursor marketplace entry name、plugin manifest name 和两者一致性均受本地 checker 约束"
+    source: 名词契约
+    status: done
+  - item: "Cursor marketplace source 必须指向存在的插件目录及 .cursor-plugin/plugin.json"
+    source: 名词契约
+    status: done
+  - item: "Cursor plugin version 与根 VERSION 一致，版本 bump 会同步更新 Cursor manifest"
+    source: 名词契约
+    status: done
+  - item: "manifest 继续保持 skills-only，不注册 agents、MCP、hooks 或固定 reviewer model"
+    source: 范围守护
+    status: done
+  - item: "checker 离线、确定性运行，不下载或复制一套通用 Cursor schema"
+    source: 流程级约束
+    status: done
+  - item: "README.md 与 README.en.md 同步提供 Cursor 安装和升级入口"
+    source: 挂载点
+    status: done
+  - item: "runtime sync 不使用 --force；clean tracked target-only 保持既有可删除合同，managed dirty 中仅 untracked target-only stale asset 可作为新增例外"
+    source: 流程级约束
+    status: done
+  - item: "staged/modified target-only、source-backed dirty asset 和其他 managed dirty 仍返回 managed-paths-dirty，内容不可被覆盖"
+    source: 流程级约束
+    status: done
+  - item: "只清理 runtime-sync 报告的 stale managed reference，不删除 legacy compatibility 和历史产物"
+    source: 范围守护
+    status: done
+  - item: "叠加 scoped diff 的隔离候选与当前主工作区都达到 v1.0.4 runtime status=ok"
+    source: 验收场景
+    status: done
+  - item: "本 feature 不恢复 cs-task、旧 workflow-conventions 或第二套 workflow 状态机"
+    source: 范围守护
+    status: done
+  - item: "本 feature 不修改 VERSION、不 commit、不发布 marketplace"
+    source: 范围守护
+    status: done
+  - item: "owner-approved requirement delta 先扩展 Cursor 宿主范围，验收时再追加实现记录"
+    source: 验收场景
+    status: done
+
+dod:
+  commands:
+    - id: CMD-001
+      command: 'tmp=$(mktemp -d) && git archive HEAD | tar -x -C "$tmp" && git -C "$tmp" init -q && git diff --binary HEAD -- tools/check-plugin-package.py tests/test_plugin_package.py tests/test_cs_skill_release.py README.md README.en.md plugins/codestable/skills/cs-onboard/tools/codestable_runtime.py tests/test_codestable_doctor.py tests/test_skill_entry_simplification.py | (cd "$tmp" && git apply -) && python3 "$tmp/tools/check-plugin-package.py" --root "$tmp" && python3 "$tmp/plugins/codestable/skills/cs-onboard/tools/codestable-runtime-sync.py" --root "$tmp" --source-skill-dir "$tmp/plugins/codestable/skills/cs-onboard" --plugin-version 1.0.4 --check --json'
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-002
+      command: "uv run --with pytest --with pyyaml pytest tests/test_plugin_package.py tests/test_cs_skill_release.py"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-003
+      command: "uv run --with pytest --with pyyaml pytest tests"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-004
+      command: "python3 plugins/codestable/skills/cs-onboard/tools/codestable-runtime-sync.py --root . --source-skill-dir plugins/codestable/skills/cs-onboard --plugin-version 1.0.4 --check --json"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-005
+      command: "uv run --with pytest --with pyyaml pytest tests/test_codestable_doctor.py tests/test_skill_entry_simplification.py"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-006
+      command: "git diff --check"
+      core: true
+      failure_handling: fix-or-block
+  evidence_required:
+    - command_output
+    - findings_json
+    - runtime_health_json
+    - diff_summary
+  cleanliness:
+    debug_output: forbidden
+    temporary_todo: forbidden
+    force_runtime_sync: forbidden
+    legacy_asset_deletion: forbidden

@@ -24,10 +24,9 @@ data ManagedAssets = NoManagedAssets | ManagedClean | ManagedDirty [Path]
 data OnboardDecision
   = ApproveManagedOverwrite | PreserveManagedAssets
   | ApproveMigrationMapping | SkipMigrationMapping
-  | ApproveGlobalInstall | SkipGlobalInstall
-data CheckpointReason = ConfirmManagedOverwrite [Path] | ConfirmMigrationMapping Path [Path] | ConfirmGlobalInstall
+data CheckpointReason = ConfirmManagedOverwrite [Path] | ConfirmMigrationMapping Path [Path]
 data OnboardOutcome = Scaffold | Migrate | Refresh | HumanCheckpoint CheckpointReason | NeedsHuman Reason | Blocked Reason
-data ResumeAction = RetrySelectedPath | StopPreservingFiles | ApplyMigrationMapping | KeepOriginalFile | InstallOptionalTool | ContinueWithoutOcr
+data ResumeAction = RetrySelectedPath | StopPreservingFiles | ApplyMigrationMapping | KeepOriginalFile
 
 selectOnboardPath :: OnboardMode -> RepoState -> ManagedAssets -> OnboardOutcome
 selectOnboardPath _ _ (ManagedDirty paths)    = HumanCheckpoint (ConfirmManagedOverwrite paths)
@@ -43,8 +42,6 @@ resumeOnboard (ConfirmManagedOverwrite _) ApproveManagedOverwrite = Right RetryS
 resumeOnboard (ConfirmManagedOverwrite _) PreserveManagedAssets = Right StopPreservingFiles
 resumeOnboard (ConfirmMigrationMapping _ _) ApproveMigrationMapping = Right ApplyMigrationMapping
 resumeOnboard (ConfirmMigrationMapping _ _) SkipMigrationMapping = Right KeepOriginalFile
-resumeOnboard ConfirmGlobalInstall ApproveGlobalInstall = Right InstallOptionalTool
-resumeOnboard ConfirmGlobalInstall SkipGlobalInstall = Right ContinueWithoutOcr
 resumeOnboard _ _ = Left InvalidOnboardDecision
 ```
 
@@ -212,53 +209,13 @@ python <cs-onboard skill 目录>\tools\codestable-runtime-sync.py --root . --sou
 
 ## Failure Behavior
 
-仓库未安装却请求 refresh、仓库事实无法判定时返回 `NeedsHuman`。managed assets 有本地改动、迁移映射需 owner 选择或全局安装需授权时返回 `HumanCheckpoint`，由对应 `OnboardDecision` 恢复；拒绝可保留现状退出。runtime sync、复制或校验实际失败时返回 `Blocked`，报告失败命令、受影响路径、已写文件和安全恢复动作，不把部分安装伪装成完成。
+仓库未安装却请求 refresh、仓库事实无法判定时返回 `NeedsHuman`。managed assets 有本地改动或迁移映射需 owner 选择时返回 `HumanCheckpoint`，由对应 `OnboardDecision` 恢复；拒绝可保留现状退出。runtime sync、复制或校验实际失败时返回 `Blocked`，报告失败命令、受影响路径、已写文件和安全恢复动作，不把部分安装伪装成完成。
 
 ---
 
-## 行级代码审查工具 open-code-review（可选）
+## Review 工具边界
 
-`cs-code-review` 的审查分两环节：独立隔离 agent review（必需）+ OCR 行级扫描（增强）。OCR 用的是 [open-code-review](https://github.com/alibaba/open-code-review) 的 `ocr` CLI——装上后 `cs-code-review` 会自动检测并调用，没装则自然降级，不阻塞。
-
-本节只在 owner 主动要求配置 OCR，或 review 报告指出 OCR 未安装且 owner 选择启用增强时加载；它不属于 onboard 完成条件。普通接入不探测、不提示安装，也不因 OCR 缺失增加 checkpoint。
-
-### 1. 安装：先检测，已装就别重装
-
-```bash
-which ocr   # 已经有路径 → 跳过安装，直接进第 2 步
-```
-
-只有 `which ocr` 找不到时才返回 `HumanCheckpoint ConfirmGlobalInstall`；owner 的 `ApproveGlobalInstall` / `SkipGlobalInstall` 经 `resumeOnboard` 恢复，批准后才全局装：
-
-```bash
-npm install -g @alibaba-group/open-code-review
-```
-
-> 全局安装是 owner 环境改动（需联网），必须先确认再装，不自动执行。owner 拒绝 → 不装，`cs-code-review` 检测不到会记 `not-available` 并继续。
-
-### 2. 配置 LLM：用 provider 体系，别用旧 `llm.*` 块
-
-> ⚠️ **最容易踩的坑**：ocr v1.x 用的是 **`provider` / `providers` 体系**。网上 / 旧文档教的 `ocr config set llm.url ...`（`llm.*` 块）在新版**不生效**——配了也会被忽略，`ocr` 仍按默认 provider 连官方端点，表现为 `ocr llm test` 卡住超时（`context deadline exceeded`）。
-
-`ocr` 是**独立 CLI 进程**，不复用 codex / claude agent 的模型——agent 只是替它执行 `ocr review` 命令，`ocr` 自己去连配置好的 LLM backend，必须单独配。
-
-内置 provider 列表用 `ocr llm providers` 查。配置（以 anthropic 兼容网关为例）：
-
-```bash
-ocr config set provider anthropic
-ocr config set providers.anthropic.url <网关 base-url>   # 不含 /v1/messages，ocr 按协议自动拼
-ocr config set providers.anthropic.api_key <api-key>
-ocr config set model <model>                             # 如 claude-opus-4-8
-ocr llm test                                             # 必须看到 ✓ Connection test successful
-```
-
-- 字段名是 **`url`** 不是 `base_url`；anthropic 协议下 ocr 会自动拼 `/v1/messages`。
-- OpenAI 兼容网关同理：`ocr config set provider <name>`（用 openai 协议的内置 provider 或自定义）+ `providers.<name>.url` + `.api_key`。
-- 绝不替 owner 编造 / 硬编码 API key——只给命令模板，由 owner 自己填。
-
-### 3. 收尾自检
-
-跑 `python3 <cs-onboard skill 目录>/tools/codestable-doctor.py --root .`，输出末尾 `OCR tool:` 行会报 `configured` / `unconfigured` / `misconfigured` / `not-installed`，并对错配（如残留旧 `llm.*` 块、provider 缺失）给出精确修复指引。doctor 只做静态体检、不发网络请求，连通性仍以 `ocr llm test` 为准。
+CodeStable review 只使用宿主提供的独立 Task agent，不安装、不探测、不配置 OCR、桌面应用或其它第三方 review APP。`cs-onboard` 只负责 CodeStable 自有 runtime、reference 和 gate 资产。
 
 ---
 
@@ -270,7 +227,6 @@ ocr llm test                                             # 必须看到 ✓ Conn
 - [ ] `.codestable/gates/`、`.codestable/reference/` 已从技能包复制
 - [ ] `.codestable/runtime-manifest.json` 已写入当前技能包版本
 - [ ] 新版工具从 `<cs-onboard skill 目录>/tools/` 调用；旧 `.codestable/tools/` 未被删除或覆盖
-- [ ] 若 owner 本轮明确要求配置 OCR：已检测安装状态并记录结果；否则已跳过且不影响 onboard 完成
 - [ ] 迁移路径：每条映射都有明确处理结果（迁移 / 保留原位）
 - [ ] 迁移路径：没有未经确认就移动的文件
 - [ ] 验收汇报已给出
