@@ -23,6 +23,7 @@ EXPERIMENT = ROOT / "experiments/cs-code-review-001"
 def _mk_repo(tmp_path):
     (tmp_path / "plugins/codestable/.codex-plugin").mkdir(parents=True)
     (tmp_path / "plugins/codestable/.claude-plugin").mkdir(parents=True)
+    (tmp_path / "plugins/codestable/.cursor-plugin").mkdir(parents=True)
     (tmp_path / "plugins/codestable/skills/cs-onboard").mkdir(parents=True)
     (tmp_path / ".claude-plugin").mkdir()
     (tmp_path / ".agents/plugins").mkdir(parents=True)
@@ -31,8 +32,11 @@ def _mk_repo(tmp_path):
         "1.0.0\n", encoding="utf-8"
     )
     (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## 1.0.0\n\n- init\n", encoding="utf-8")
-    for rel in ("plugins/codestable/.codex-plugin/plugin.json",
-                "plugins/codestable/.claude-plugin/plugin.json"):
+    for rel in (
+        "plugins/codestable/.codex-plugin/plugin.json",
+        "plugins/codestable/.claude-plugin/plugin.json",
+        "plugins/codestable/.cursor-plugin/plugin.json",
+    ):
         (tmp_path / rel).write_text(json.dumps({"name": "codestable", "version": "1.0.0"}), encoding="utf-8")
     for rel in (".claude-plugin/marketplace.json", ".agents/plugins/marketplace.json"):
         (tmp_path / rel).write_text(json.dumps({"plugins": [{"version": "1.0.0"}]}), encoding="utf-8")
@@ -45,6 +49,7 @@ def test_bump_version_syncs_all(tmp_path):
     assert (repo / "VERSION").read_text().strip() == "1.1.0"
     assert (repo / "plugins/codestable/skills/cs-onboard/VERSION").read_text().strip() == "1.1.0"
     assert json.loads((repo / "plugins/codestable/.codex-plugin/plugin.json").read_text())["version"] == "1.1.0"
+    assert json.loads((repo / "plugins/codestable/.cursor-plugin/plugin.json").read_text())["version"] == "1.1.0"
     assert json.loads((repo / ".claude-plugin/marketplace.json").read_text())["plugins"][0]["version"] == "1.1.0"
     assert json.loads((repo / ".agents/plugins/marketplace.json").read_text())["plugins"][0]["version"] == "1.1.0"
     assert "## 1.1.0" in (repo / "CHANGELOG.md").read_text()

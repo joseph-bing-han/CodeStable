@@ -5,6 +5,7 @@
 - plugins/codestable/skills/cs-onboard/VERSION
 - plugins/codestable/.codex-plugin/plugin.json [version]
 - plugins/codestable/.claude-plugin/plugin.json [version]
+- plugins/codestable/.cursor-plugin/plugin.json [version]
 - .claude-plugin/marketplace.json [plugins,0,version]
 - .agents/plugins/marketplace.json [plugins,0,version]
 须一致；CHANGELOG.md 须有 `## {version}` 段。
@@ -34,6 +35,7 @@ TARGETS = [
     ("plugins/codestable/skills/cs-onboard/VERSION", None),
     ("plugins/codestable/.codex-plugin/plugin.json", ["version"]),
     ("plugins/codestable/.claude-plugin/plugin.json", ["version"]),
+    ("plugins/codestable/.cursor-plugin/plugin.json", ["version"]),
     (".claude-plugin/marketplace.json", ["plugins", 0, "version"]),
     (".agents/plugins/marketplace.json", ["plugins", 0, "version"]),
 ]

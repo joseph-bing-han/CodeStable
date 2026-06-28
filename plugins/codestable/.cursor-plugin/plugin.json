@@ -1,0 +1,19 @@
+{
+  "name": "codestable",
+  "displayName": "CodeStable",
+  "description": "CodeStable AI coding workflow skills.",
+  "version": "1.0.4",
+  "author": {
+    "name": "CodeStable"
+  },
+  "homepage": "https://github.com/joseph-bing-han/CodeStable",
+  "repository": "https://github.com/joseph-bing-han/CodeStable",
+  "keywords": [
+    "skills",
+    "workflow",
+    "codestable",
+    "engineering",
+    "development"
+  ],
+  "skills": "./skills/"
+}

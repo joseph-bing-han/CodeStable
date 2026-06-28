@@ -86,6 +86,7 @@ def check_manifest_versions(root: Path, version: str | None, findings: list[Find
     manifests = [
         ("plugins/codestable/.codex-plugin/plugin.json", ["version"]),
         ("plugins/codestable/.claude-plugin/plugin.json", ["version"]),
+        ("plugins/codestable/.cursor-plugin/plugin.json", ["version"]),
         (".claude-plugin/marketplace.json", ["plugins", 0, "version"]),
         (".agents/plugins/marketplace.json", ["plugins", 0, "version"]),
     ]
@@ -124,8 +125,12 @@ def check_catalog_contracts(root: Path, findings: list[Finding]) -> None:
         (".claude-plugin/marketplace.json", ["owner", "name"], "CodeStable"),
         (".claude-plugin/marketplace.json", ["description"], "CodeStable AI coding workflow skills."),
         (".claude-plugin/marketplace.json", ["plugins", 0, "source"], "./plugins/codestable"),
+        (".cursor-plugin/marketplace.json", ["name"], "codestable"),
+        (".cursor-plugin/marketplace.json", ["owner", "name"], "CodeStable"),
+        (".cursor-plugin/marketplace.json", ["plugins", 0, "source"], "plugins/codestable"),
         ("plugins/codestable/.claude-plugin/plugin.json", ["author", "name"], "CodeStable"),
         ("plugins/codestable/.codex-plugin/plugin.json", ["skills"], "./skills/"),
+        ("plugins/codestable/.cursor-plugin/plugin.json", ["skills"], "./skills/"),
     ]
     cache: dict[str, Any | None] = {}
     for filename, keys, expected in checks:
@@ -195,8 +200,10 @@ def check_ignored_assets(root: Path, findings: list[Finding]) -> None:
     assets = [
         root / ".agents/plugins/marketplace.json",
         root / ".claude-plugin/marketplace.json",
+        root / ".cursor-plugin/marketplace.json",
         root / "plugins/codestable/.codex-plugin/plugin.json",
         root / "plugins/codestable/.claude-plugin/plugin.json",
+        root / "plugins/codestable/.cursor-plugin/plugin.json",
         root / "plugins/codestable/skills/cs/SKILL.md",
     ]
     for path in assets:
@@ -241,6 +248,7 @@ def check_source_plugin_skills_only(root: Path, findings: list[Finding]) -> None
     for filename in (
         "plugins/codestable/.codex-plugin/plugin.json",
         "plugins/codestable/.claude-plugin/plugin.json",
+        "plugins/codestable/.cursor-plugin/plugin.json",
     ):
         data, error = read_json(root / filename)
         if error or not isinstance(data, dict):

@@ -73,12 +73,24 @@ def make_repo(tmp_path: Path) -> Path:
         },
     )
     write_json(
+        repo / ".cursor-plugin/marketplace.json",
+        {
+            "name": "codestable",
+            "owner": {"name": "CodeStable"},
+            "plugins": [{"name": "codestable", "source": "plugins/codestable"}],
+        },
+    )
+    write_json(
         repo / "plugins/codestable/.codex-plugin/plugin.json",
         {"name": "codestable", "version": "0.1.0", "skills": "./skills/"},
     )
     write_json(
         repo / "plugins/codestable/.claude-plugin/plugin.json",
         {"name": "codestable", "version": "0.1.0", "author": {"name": "CodeStable"}},
+    )
+    write_json(
+        repo / "plugins/codestable/.cursor-plugin/plugin.json",
+        {"name": "codestable", "version": "0.1.0", "skills": "./skills/"},
     )
     for skill in ["cs", "cs-feat", "cs-onboard"]:
         skill_dir = repo / "plugins/codestable/skills" / skill
@@ -143,6 +155,7 @@ def test_source_plugin_manifests_must_not_register_agent_mcp(tmp_path: Path) -> 
     for relative in (
         "plugins/codestable/.codex-plugin/plugin.json",
         "plugins/codestable/.claude-plugin/plugin.json",
+        "plugins/codestable/.cursor-plugin/plugin.json",
     ):
         path = repo / relative
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -151,7 +164,7 @@ def test_source_plugin_manifests_must_not_register_agent_mcp(tmp_path: Path) -> 
 
     findings = checker.check_repo(repo)
 
-    assert sum("source plugin manifest must remain skills-only" in message for message in messages(findings)) == 2
+    assert sum("source plugin manifest must remain skills-only" in message for message in messages(findings)) == 3
 
 
 def test_missing_version_fails(tmp_path: Path) -> None:

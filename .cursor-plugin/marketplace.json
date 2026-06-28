@@ -1,0 +1,16 @@
+{
+  "name": "codestable",
+  "owner": {
+    "name": "CodeStable"
+  },
+  "metadata": {
+    "description": "CodeStable local Cursor plugins."
+  },
+  "plugins": [
+    {
+      "name": "codestable",
+      "source": "plugins/codestable",
+      "description": "CodeStable AI coding workflow skills."
+    }
+  ]
+}
