@@ -67,13 +67,18 @@ steps:
     assert [e["id"] for e in data["evidence"]] == ["S-1"]
 
 
-def test_top_and_step_level_merge(tmp_path: Path) -> None:
+def test_top_level_takes_precedence_no_duplicate(tmp_path: Path) -> None:
+    """When both top-level and step-level dod.commands exist, top-level is the
+    single source — commands must NOT be executed twice."""
     data = run_dod(
         tmp_path,
         """feature: x
 dod:
   commands:
-    - id: TOP-1
+    - id: CMD-001
+      command: "true"
+      core: true
+    - id: CMD-002
       command: "true"
       core: true
 steps:
@@ -81,13 +86,17 @@ steps:
     status: done
     dod:
       commands:
-        - id: STEP-1
+        - id: CMD-001
+          command: "true"
+          core: true
+        - id: CMD-002
           command: "true"
           core: true
 """,
     )
     assert data["status"] == "passed"
-    assert {e["id"] for e in data["evidence"]} == {"TOP-1", "STEP-1"}
+    ids = [e["id"] for e in data["evidence"]]
+    assert ids == ["CMD-001", "CMD-002"]  # each once, no duplicate
 
 
 def test_non_core_failure_is_warning_not_block(tmp_path: Path) -> None:

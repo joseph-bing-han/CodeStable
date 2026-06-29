@@ -120,6 +120,14 @@ which ocr && ocr llm test
 ocr review --audience agent --background "{feature slug / 目标 / 本次改动范围}"
 ```
 
+**审查范围必须限定到本 feature 的人写代码改动**。`ocr review` 默认 workspace 模式会把 staged + unstaged + **untracked** 全审一遍；当工作区存在大量与本 feature 无关的 untracked 文件（最典型是 `.codestable/` goal 执行包、点目录产物）时，OCR 会横向扫描这些非范围文件，污染结果。两道控制：
+
+1. **调用时限定范围**：本 feature 改动已提交到执行分支时，优先用 ref 范围 `ocr review --audience agent --from {feature-base} --to HEAD`，天然排除 untracked 产物；只有改动全在 workspace 未提交时才用默认模式。
+2. **结果过滤（兜底，必做）**：合并 OCR finding 前，**丢弃**命中以下路径的 finding，无论 OCR 是否扫到——
+   - `.codestable/`（CodeStable 自己的 spec / 工具产物，永远不是行级代码审查对象）
+   - 任何 `.` 开头的目录（`.git/`、`.claude/`、`.venv/` 等）
+   - `.gitignore` 命中的文件（`git check-ignore <path>` 为真）
+
 OCR 的 High / Medium / Low 映射到 cs-code-review 严重度后合并：
 
 | OCR 优先级 | 映射规则 |
