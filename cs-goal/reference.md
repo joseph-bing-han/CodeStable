@@ -174,12 +174,12 @@ semantics:
 
 ## Functional Acceptance Report
 
-Before `status: complete`, dispatch a subagent for product-facing functional
+Before `status: complete`, dispatch a Task agent for product-facing functional
 acceptance. Record the result in `functional-acceptance.md`.
 
 The report must include:
 
-- reviewer and subagent role;
+- reviewer and Task agent role;
 - acceptance criteria checked;
 - functional evidence beyond tests alone;
 - verdict: pass, fail, or inconclusive;
@@ -187,7 +187,7 @@ The report must include:
 - the final iteration that cites this acceptance.
 
 Tests, linters, and builds are verification evidence, but completion requires
-subagent functional acceptance. If subagent dispatch is unavailable or not
+Task agent functional acceptance. If Task agent dispatch is unavailable or not
 authorized, write `approval-report.md` and owner-stop instead of marking the
 goal complete.
 

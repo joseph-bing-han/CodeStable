@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a redacted packet for staged subagent review."""
+"""Build a redacted packet for staged Task agent review."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ STAGE_BRIEFS = {
     "implementation": {
         "title": "Implementation Review",
         "mission": (
-            "Review the implementation as an independent subagent. Verify the code directly from "
+            "Review the implementation as an independent Task agent. Verify the code directly from "
             "the packet instead of trusting the implementer summary."
         ),
         "focus": (

@@ -55,7 +55,7 @@ secret-like text, concrete files, and evidence.
 python3 .codestable/tools/check-context-sufficiency.py --file /tmp/codestable-human-review.md --strict --json
 ```
 
-Use before dispatching a human reviewer / subagent reviewer, or before sharing a
+Use before dispatching a human reviewer / Task agent reviewer, or before sharing a
 context packet as evidence in an approval report.
 
 ## 3. codestable-finish-worktree.py

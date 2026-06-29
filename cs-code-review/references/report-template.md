@@ -14,8 +14,8 @@
 
 | 值 | 含义 |
 |---|---|
-| `subagent+ocr` | Paseo 或原生 Agent tool（独立上下文）+ ocr CLI 均已完成并合并 |
-| `subagent` | 仅独立上下文 reviewer（Paseo 或原生 Agent tool）完成 |
+| `subagent+ocr` | Task agent reviewer（Paseo subagent 或原生 Codex/Claude Task/Agent）+ ocr CLI 均已完成并合并 |
+| `subagent` | 仅 Task agent reviewer 完成 |
 | `ocr` | 仅 ocr CLI 完成 |
 | `self` | 仅主 agent 本地 review |
 
@@ -46,8 +46,8 @@ round: 1
 
 ### Independent Review
 
-- Detection: {主 agent 自检结果——Paseo create_agent / 原生 Agent / ocr CLI 各是否可用}
-- 环节 A 独立隔离 agent: {paseo|native-agent|local-only} + {not-available|pending|completed|failed|blocked|skipped-by-user}
+- Detection: {主 agent 自检结果——Paseo subagent / 原生 Codex/Claude Task/Agent / ocr CLI 各是否可用}
+- 环节 A 独立隔离 Task agent: {paseo|native-agent|local-only} + {not-available|pending|completed|failed|blocked|skipped-by-user}
 - 环节 B OCR CLI: not-available|completed|failed|skipped-scope-ambiguous|skipped-by-user
 - OCR severity mapping: High→blocking/important, Medium→nit/suggestion, Low→discarded
 - Merge policy: {各环节结果已逐条本地核验后合并 / 未启用原因 / pending 时不得定稿}

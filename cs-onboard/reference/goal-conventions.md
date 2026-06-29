@@ -9,7 +9,7 @@ for `cs-goal`.
 Goals are bounded start/end work units. The owner defines the outcome and
 acceptance signal; AI interviews / grills briefly, writes a start report,
 implements, verifies, self-iterates, and writes iteration reports. A goal can
-close only after subagent functional acceptance of the produced result.
+close only after Task agent functional acceptance of the produced result.
 
 Use goals when the request says "reach this result", "run until accepted",
 "self-iterate", "AI implements autonomously", or "grill me first".
@@ -103,7 +103,7 @@ Before `status: complete`, write:
 
 - `functional-acceptance.md`
 
-This report records subagent functional acceptance of the product / artifact
+This report records Task agent functional acceptance of the product / artifact
 against the owner acceptance criteria. Include reviewer, scope, functional
 evidence, verdict, residual risks, and the final iteration that cites it. Tests
 alone are not enough to complete a goal.

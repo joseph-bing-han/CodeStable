@@ -24,7 +24,7 @@ flows apply.
    / goal.
 2. Implement: `开 worktree 实现`. The agent starts in an execution worktree and
    runs the start gate.
-3. Review: `允许 subagent`. Completed code batches require independent review.
+3. Review: `允许 Task agent`. Completed code batches require independent review.
 4. Commit: `提交这批实现`. Run validation, commit planner, and commit gate.
 5. Finish: `finish worktree`. Run finish gate and record merge readiness.
 6. Solidify finish artifacts: commit the generated finish report files.
@@ -71,24 +71,37 @@ reason in the goal iteration and follow the lightest applicable execution path.
 - Stop for owner judgment when plan conflicts appear.
 - Treat missing env / secrets as environment blockers, not code failures.
 
+## Task Agent Selection
+
+`Task agent` means a spawned worker for isolated review, QA, audit, or
+functional acceptance. Prefer a Paseo subagent when running inside Paseo or when
+`mcp__paseo__create_agent` is available. Otherwise use the host platform's
+native Task / Agent facility, such as Codex or Claude task agents. If neither is
+available or authorized, record the limitation and use the explicit fallback /
+owner-stop path for that gate.
+
+Do not leak the main agent's conclusions into a Task agent prompt. Give only the
+raw artifacts, scope, and expected output. The main agent remains responsible
+for fact-checking returned findings and for all final state writes.
+
 ## Independent Code Review
 
 Every execution worktree must trigger independent review before reporting a
 completed implementation batch. Review is a completion gate, not a commit-time
 afterthought.
 
-If the current conversation has no subagent / delegation authorization, write
+If the current conversation has no Task agent / delegation authorization, write
 `approval-report.md` in the relevant unit before implementation review. The
 report must include these approval context fields:
 
 ```markdown
 Context: CodeStable requires independent implementation review before completion.
-Term: Subagent Review = a separate reviewer agent performs read-only review.
+Term: Task Agent Review = a separate Task agent performs read-only review.
 Why it matters: P0/P1 issues may otherwise surface after completion.
 Options:
-1. Subagent Review (recommended) - dispatch a reviewer before completion.
-2. Inline Review - valid only if this platform has no subagent support.
-Default: Subagent Review.
+1. Task Agent Review (recommended) - spawn a reviewer before completion.
+2. Inline Review - valid only if this platform has no Task agent support.
+Default: Task Agent Review.
 Non-automatic: This does not commit, merge, push, or accept findings.
 Question: Which review authorization should CodeStable use?
 ```
@@ -112,7 +125,9 @@ Risk defaults:
 
 Review results land in `{slug}-review.md` with `reviewer: subagent` or
 `reviewer: subagent+ocr`. Use `reviewer: ocr` / `self` only when the platform
-truly lacks subagents and `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` is set.
+truly lacks Task agent support and `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` is
+set. Keep these frontmatter values for gate compatibility even when the concrete
+Task agent is Paseo, Codex, or Claude.
 
 ## Context Packets
 
@@ -180,10 +195,10 @@ Snooze accepted merge deferrals:
 python3 .codestable/tools/codestable-worktree-inbox.py --root . --snooze codex_slug --until 2026-06-12T00:00:00Z --json
 ```
 
-## Subagent Implementation Choice
+## Task Agent Implementation Choice
 
-Review requires subagents when available. Implementation subagents are optional
-and should be proposed when work crosses more than three subsystems, needs
+Review requires Task agents when available. Implementation Task agents are
+optional and should be proposed when work crosses more than three subsystems, needs
 parallel slices, touches high-risk migration / concurrency / runtime contracts,
 or exceeds single-thread context. The main thread keeps integration,
 verification, and final review ownership.

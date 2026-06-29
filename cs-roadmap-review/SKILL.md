@@ -1,6 +1,6 @@
 ---
 name: cs-roadmap-review
-description: roadmap 人工确认前的规划审查 gate。对照 roadmap 主文档、items.yaml、相关 requirement / architecture / compound / 代码事实做只读 review，产出 {slug}-roadmap-review.md；优先检测 Paseo 并启动独立 audit subagent（编写者是 Codex 且不同 agent 可用时必须用 Claude 等不同 agent；不可用则记录降级和残余风险）辅助审查，主 agent 等待结果、事实核验并合并定级。触发：用户说"review 这个 roadmap"、"roadmap 人审前先独立审查"、"跑 cs-roadmap-review"、"规划审查"。
+description: roadmap 人工确认前的规划审查 gate。对照 roadmap 主文档、items.yaml、相关 requirement / architecture / compound / 代码事实做只读 review，产出 {slug}-roadmap-review.md；按 Task agent 选择规则启动独立审查（Paseo subagent 优先，否则原生 Codex/Claude Task/Agent），主 agent 等待结果、事实核验并合并定级。触发：用户说"review 这个 roadmap"、"roadmap 人审前先独立审查"、"跑 cs-roadmap-review"、"规划审查"。
 ---
 
 # cs-roadmap-review
@@ -51,17 +51,13 @@ description: roadmap 人工确认前的规划审查 gate。对照 roadmap 主文
 
 ## 独立 reviewer 增强项
 
-本阶段默认由当前 agent 做本地规划审查；独立 reviewer 是增强项，不是硬依赖。检测不到外部 agent、Paseo 不可用、provider 未配置或用户明确要求快速完成时，可以继续本地 review，并在报告里记录 `Independent reviewer: local-only` / `skipped-by-user`。
+本阶段默认由当前 agent 做本地规划审查；独立 reviewer 是增强项，不是硬依赖。检测不到 Task agent、provider 未配置或用户明确要求快速完成时，可以继续本地 review，并在报告里记录 `Independent reviewer: local-only` / `skipped-by-user`。
 
 但一旦本轮已经启动 independent reviewer，它就是本轮 review gate 的输入。主 agent 可以先做本地审查草稿，但不能在 independent reviewer 返回前定稿 `{slug}-roadmap-review.md`、不能给出 `passed`、不能把 roadmap 交给用户确认。reviewer 卡住、失败、权限阻塞或耗时过长时，只能把本轮标成 `blocked` / `independent-review-pending`，让用户决定继续等待、重试 reviewer，或明确降级为 local-only review。
 
-**检测由主 agent 在运行时自检自己的工具**，不靠脚本猜环境——主 agent 最清楚自己手上有哪些工具。按优先级选一个启动独立 reviewer：
+**检测由主 agent 在运行时自检自己的工具**，按 `.codestable/reference/execution-conventions.md` 的 Task agent 选择规则启动独立 reviewer：Paseo subagent 优先，否则用当前宿主的原生 Codex/Claude Task/Agent。都没有则本地 review，记录 `local-only`，不要伪装启动。不要无限轮询运行中的 agent；若已启动但未返回，停止在 review gate，记录 pending/blocked，等待通知或用户决定。
 
-1. **有 `mcp__paseo__create_agent` 工具**：优先用 Paseo 启动 `audit` 类 subagent 做只读独立审查（**首选**：能换 provider，做到真正异构审查）。启动前先加载 / 读取 `paseo` skill 的当前说明，并遵守它的规则：读取 `~/.paseo/orchestration-preferences.json`，使用 `providers.audit`，不要硬编码 Claude 或 Codex。编写 roadmap 的主 agent 是 Codex 且 `providers.audit` 指向 Claude / Opus 等不同 agent 时，必须使用该独立 reviewer；如果只能用同类 agent，在报告里记录降级和残余风险。不要无限轮询运行中的 agent；如果 reviewer 已启动但结果未返回，停止在 review gate，记录 pending/blocked，等待通知或用户决定。
-2. **否则有 `Agent`（subagent）工具**：用原生 subagent 做独立上下文审查。独立上下文同样达成，只是与主 agent 同模型——仍显著优于自审；如属同类 agent，在报告里记录降级和残余风险。
-3. **两者都没有**：本地 review，记录 `local-only`，不要伪装启动。
-
-Paseo subagent prompt 必须只给原始材料和边界，不透露本地 review 结论：
+Task agent prompt 必须只给原始材料和边界，不透露本地 review 结论：
 
 ```text
 你是 CodeStable roadmap 的独立规划审查 agent。只读，不修改文件，不更新 roadmap/items。
@@ -98,7 +94,7 @@ Paseo subagent prompt 必须只给原始材料和边界，不透露本地 review
 
 - 记录主 agent 自检结果：`paseo` / `native-agent` / `local-only`。
 - 没有启动 independent reviewer 时，记录原因，本地 review 可以定稿。
-- 启动 Paseo / 原生 subagent 后，最终 verdict 必须等 reviewer 返回。
+- 启动 Task agent 后，最终 verdict 必须等 reviewer 返回。
 - reviewer 返回后逐条做本地事实核验；能用文档 / 代码 / items 证据支撑才合并。
 - reviewer 失败、权限阻塞、超时或仍在运行时，不要默默降级；报告 `status: blocked`。
 

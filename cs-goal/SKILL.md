@@ -7,7 +7,7 @@ description: Goal-driven autonomous workflow for bounded start/end tasks. Use wh
 
 `cs-goal` handles bounded goals: the owner gives the starting point and desired
 end state, then CodeStable interviews / grills lightly, writes a start report
-before implementation, implements autonomously, verifies, requests subagent
+before implementation, implements autonomously, verifies, requests Task agent
 functional acceptance before completion, and writes iteration reports. Report
 prose follows the project's report language policy in `.codestable/attention.md`;
 if no policy exists, use the owner's current conversation language.
@@ -177,7 +177,7 @@ functional acceptance gate first.
 Before changing `state.yaml.status` to `complete`:
 
 1. Run normal verification with fresh evidence.
-2. Dispatch a subagent to perform functional acceptance against the recorded
+2. Dispatch a Task agent to perform functional acceptance against the recorded
    owner acceptance criteria and actual product / artifact behavior.
 3. Record the result in `functional-acceptance.md`, including reviewer, scope,
    acceptance checks, functional evidence, verdict, residual risks, and any
@@ -189,7 +189,7 @@ artifact inspection, UI / API workflow checks, fixture output review, or another
 owner-relevant proof. Unit tests, linters, and build checks are useful evidence
 but are not enough by themselves.
 
-If subagent dispatch is unavailable or not authorized, owner-stop with
+If Task agent dispatch is unavailable or not authorized, owner-stop with
 `approval-report.md`; do not self-accept the goal as complete.
 
 ## Strict Owner Stops
@@ -212,7 +212,7 @@ refactors are AI-owned unless they cross one of the stops above.
 
 ## Completion And Blocked Rules
 
-Mark `complete` only when the acceptance signal is satisfied, the subagent
+Mark `complete` only when the acceptance signal is satisfied, the Task agent
 functional acceptance report records a passing verdict, and evidence is
 recorded in the final iteration.
 
@@ -233,7 +233,7 @@ pretending completion.
 
 A goal run exits with one of:
 
-- `complete`: acceptance evidence, subagent functional acceptance, and final
+- `complete`: acceptance evidence, Task agent functional acceptance, and final
   iteration written.
 - `blocked`: blocker evidence and owner question recorded.
 - `active`: iteration report written and next action recorded, but the current
@@ -250,6 +250,6 @@ report, and `functional-acceptance.md` when the goal is complete.
 - Do not let report prose override `state.yaml`.
 - Do not create duplicate active goals for the same objective.
 - Do not skip iteration reports after meaningful work.
-- Do not mark completion from tests alone or forge subagent acceptance.
+- Do not mark completion from tests alone or forge Task agent acceptance.
 - Do not keep iterating after a strict owner-stop fires.
 - Keep every Markdown artifact under 300 lines; split long reports.

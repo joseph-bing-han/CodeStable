@@ -16,7 +16,7 @@ CodeStable 把这几类场景各配一套子技能，产物放进统一的目录
 **做事**——从一段模糊想法走到上线的功能、或者从一份错误报告走到修好的 bug:
 
 - `cs-feat` — 新功能,design → design-review → implement → code-review → QA → acceptance（想法还模糊时先走讨论层 `cs-brainstorm` 做分诊，不属于 feature 流程内部）
-- `cs-goal` — 目标达成,限定起点/终点 → interview/grill 写起点报告 → 自主迭代实现/验证 → 完成前 subagent 功能验收
+- `cs-goal` — 目标达成,限定起点/终点 → interview/grill 写起点报告 → 自主迭代实现/验证 → 完成前 Task agent 功能验收
 - `cs-issue` — 修 bug,report → analyze → fix
 - `cs-refactor` — 代码优化(行为不变、结构/性能/可读性变),scan → design → apply
 - `cs-code-review` — 各执行流末端、commit 前的横切独立 diff 评审（质量门禁）

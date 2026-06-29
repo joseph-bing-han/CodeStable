@@ -149,7 +149,7 @@ def test_self_review_evidence_requires_explicit_fallback(tmp_path: Path, monkeyp
     ok, findings, _meta = gate.validate(repo)
 
     assert not ok
-    assert "must use a subagent reviewer" in findings[0].message
+    assert "must use a Task agent reviewer" in findings[0].message
 
     monkeypatch.setenv("CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK", "1")
     ok, findings, _meta = gate.validate(repo)
@@ -174,7 +174,7 @@ def test_self_review_explanation_does_not_count_as_subagent_evidence(tmp_path: P
     ok, findings, _meta = gate.validate(repo)
 
     assert not ok
-    assert "must use a subagent reviewer" in findings[0].message
+    assert "must use a Task agent reviewer" in findings[0].message
 
 
 def test_issue_fix_note_requires_review_evidence(tmp_path: Path, monkeypatch) -> None:

@@ -2,7 +2,7 @@
 """Gate CodeStable implementation handoffs.
 
 Implementation diffs should run in a linked worktree. Completed CodeStable
-implementation units should carry subagent code-review evidence ({slug}-review.md)
+implementation units should carry Task agent code-review evidence ({slug}-review.md)
 before the agent reports done.
 """
 
@@ -248,8 +248,8 @@ def validate(root: Path) -> tuple[bool, list[Finding], dict[str, object]]:
                 Finding(
                     severity="P1",
                     message=(
-                        "CodeStable implementation review must use a subagent reviewer. "
-                        f"Set {SELF_REVIEW_FALLBACK_ENV}=1 only when the platform has no subagent capability."
+                        "CodeStable implementation review must use a Task agent reviewer. "
+                        f"Set {SELF_REVIEW_FALLBACK_ENV}=1 only when the platform has no Task agent capability."
                     ),
                     path=path,
                 )

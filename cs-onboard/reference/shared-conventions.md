@@ -267,6 +267,6 @@ feature-design / issue-analyze / issue-fix 动手前到 `.codestable/compound/` 
 
 ## 9. 执行约定与 worktree
 
-实现执行拓扑、worktree gate、code review、finish gate、context packet 和 subagent 选择拆在 `.codestable/reference/execution-conventions.md`，approval 报告口径在 `approval-conventions.md`。
+实现执行拓扑、worktree gate、code review、finish gate、context packet 和 Task agent 选择拆在 `.codestable/reference/execution-conventions.md`，approval 报告口径在 `approval-conventions.md`。
 
 - **不要让 AI 在主协调检出里 `git switch` / `git checkout`**——需要执行分支时用 git worktree；可用 `branch-guard-hooks.md` 配 command hook 硬拦在 `main`/`master` 上的直接实现。

@@ -377,7 +377,7 @@ def missing_review_findings(root: Path, units: list[Path]) -> list[Finding]:
             findings.append(
                 Finding(
                     severity="P1",
-                    message="CodeStable implementation review must use a subagent reviewer.",
+                    message="CodeStable implementation review must use a Task agent reviewer.",
                     path=review_path.as_posix(),
                 )
             )
