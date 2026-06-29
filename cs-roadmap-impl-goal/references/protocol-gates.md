@@ -59,7 +59,7 @@
 
 - review 基于当前 diff。
 - review `status=passed`。
-- review 必须由独立 reviewer 完成；frontmatter `reviewer: subagent` 是默认放行锚点。`reviewer: self` 只能作为本地草稿或用户显式降级 fallback，不能静默通过。
+- review 必须由独立 reviewer 完成；frontmatter `reviewer: subagent` 或 `subagent+ocr` 是默认放行锚点。`reviewer: ocr` / `self` 只能作为用户显式降级 fallback，不能静默通过。
 - 无 unresolved blocking。
 - review 明确消费 evidence pack 和 gate results。
 - high-risk provider warnings 已解释或交给 QA。
@@ -77,6 +77,7 @@
 - 功能性核心路径有实际运行证据。
 - 非功能性 feature 有替代证据理由。
 - QA 没有把核心缺口写成 residual-risk。
+- 高风险 feature 建议启用独立 QA runner/subagent；其输出必须由主流程核验并写入 QA 报告，runner 不替代正式 verdict。
 
 失败返回 qa-fix，再重跑 review 和 QA。
 
@@ -91,6 +92,7 @@
 - blocking DoD 均有 pass evidence。
 - roadmap item 已回写。
 - residual risk 不包含核心验收缺口。
+- 可选只读 acceptance auditor 只能提供复核 findings；checklist / roadmap / requirement / acceptance 状态写入必须由主流程 owner 完成。
 
 失败返回 acceptance 修；实现缺口回 impl 并重跑 review / QA / acceptance。
 

@@ -1,6 +1,6 @@
 ---
 name: cs-feat-qa
-description: feature 流程阶段 2.6——代码审查通过后的本地 QA 验证 gate。对照 design / checklist / review 报告和最终 diff，运行必跑命令、测试、浏览器或手工验证，产出 {slug}-qa.md；QA 失败时回到 cs-feat-impl 的 qa-fix，不能直接进入验收。触发：用户说"做 QA"、"跑测试验收前验证"、"review 过了跑 QA"、"跑 cs-feat-qa"。
+description: feature 流程阶段 2.6——代码审查通过后的 QA 验证 gate。对照 design / checklist / review 报告和最终 diff，运行必跑命令、测试、浏览器或手工验证，产出 {slug}-qa.md；可选独立 QA runner/subagent 辅助执行验证，但正式 verdict 和报告由本技能落盘；QA 失败时回到 cs-feat-impl 的 qa-fix。触发：用户说"做 QA"、"跑测试验收前验证"、"review 过了跑 QA"、"跑 cs-feat-qa"。
 ---
 
 # cs-feat-qa
@@ -9,11 +9,22 @@ description: feature 流程阶段 2.6——代码审查通过后的本地 QA 验
 
 开始任何判断或动作前，先读取 `.codestable/attention.md`；缺失则视为骨架不完整，提示先补齐或运行 `cs-onboard`，不要回退到外部 AI 入口文件。
 
-本阶段是 review 通过后、acceptance 前的本地 QA gate。它只读代码和产物、运行验证命令 / 浏览器 / API / 手工检查，并写 `{slug}-qa.md`。默认不改代码、不改 checklist、不改 design；发现失败后回到 `cs-feat-impl` 的 qa-fix。
+本阶段是 review 通过后、acceptance 前的 QA gate。它只读代码和产物、运行验证命令 / 浏览器 / API / 手工检查，并写 `{slug}-qa.md`。默认不改代码、不改 checklist、不改 design；发现失败后回到 `cs-feat-impl` 的 qa-fix。
 
 QA 的目标不是再做一遍 code review，也不是最终归档验收报告。它回答一个问题：在当前工作区里，design 承诺的关键行为是否有足够的运行证据，review 指出的测试焦点和 residual risk 是否被实际覆盖。
 
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md` 第 0 节。
+
+---
+
+## 独立 QA runner（可选）
+
+QA 可以启用独立 runner/subagent 来执行浏览器、API、CLI、集成测试或环境复核，尤其是高风险功能、外部集成、真实浏览器路径和 goal 模式中的核心验收路径。但它是辅助执行者，不是 QA owner：
+
+- 主 agent 负责建立 Verification Matrix、决定哪些证据阻塞、核验 runner 输出，并写 `{slug}-qa.md` 的最终 verdict。
+- runner 默认只读代码和产物，只运行验证；如需改测试或配置，必须退回 `cs-feat-impl` qa-fix。
+- runner 输出必须被写入 QA 报告的证据来源；未经主 agent 本地核验的结论只能作为 `residual-risk` 或待复核项。
+- 普通低风险非功能性 feature 不强制独立 runner，避免把 QA 成本固定放大。
 
 ---
 

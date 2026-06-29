@@ -16,8 +16,8 @@
 | 特性流程 | `cs-feat-design-review` | feature design 人工确认前的独立方案审查 gate |
 | 特性流程 | `cs-feat-impl` | 按 design 的推进顺序写代码 |
 | 特性流程 | `cs-code-review` | 实现完成后的只读代码审查 gate |
-| 特性流程 | `cs-feat-qa` | 代码审查通过后的本地 QA 验证 gate |
-| 特性流程 | `cs-feat-accept` | 对照 design 核对实现并完成验收闭环 |
+| 特性流程 | `cs-feat-qa` | 代码审查通过后的 QA 验证 gate，可用独立 runner 辅助 |
+| 特性流程 | `cs-feat-accept` | 对照 design 核对实现并完成验收闭环，可用只读 auditor 复核 |
 | 特性流程 | `cs-feat-ff` | 超轻量通道：不写 design、不分阶段，直接实现 |
 | 问题流程 | `cs-issue` | 问题修复子流程入口 |
 | 问题流程 | `cs-issue-report` | 把问题落成可复现、可追溯的 report |

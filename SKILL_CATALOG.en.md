@@ -16,8 +16,8 @@
 | Feature flow | `cs-feat-design-review` | Independent feature design review gate before human approval |
 | Feature flow | `cs-feat-impl` | Code in the order the design lays out |
 | Feature flow | `cs-code-review` | Read-only code review gate after implementation |
-| Feature flow | `cs-feat-qa` | Local QA verification gate after code review |
-| Feature flow | `cs-feat-accept` | Verify implementation against the design and close the loop |
+| Feature flow | `cs-feat-qa` | QA verification gate after code review; optional independent runner |
+| Feature flow | `cs-feat-accept` | Verify implementation and close the loop; optional read-only auditor |
 | Feature flow | `cs-feat-ff` | Ultra-light lane: no design, no phases, direct implementation |
 | Issue flow | `cs-issue` | Sub-flow entry for issue fixing |
 | Issue flow | `cs-issue-report` | Turn a problem into a reproducible, traceable report |

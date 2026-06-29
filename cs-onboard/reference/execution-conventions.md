@@ -110,9 +110,9 @@ Risk defaults:
 - schema / security / core runtime: spec, quality, and verification reviews;
 - large multi-module work: staged execution with handoff context.
 
-Review results land in `{slug}-review.md` with
-`reviewer: subagent`. Use `reviewer: self` only when the platform truly lacks
-subagents and `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` is set.
+Review results land in `{slug}-review.md` with `reviewer: subagent` or
+`reviewer: subagent+ocr`. Use `reviewer: ocr` / `self` only when the platform
+truly lacks subagents and `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` is set.
 
 ## Context Packets
 

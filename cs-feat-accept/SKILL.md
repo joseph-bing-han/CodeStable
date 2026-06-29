@@ -1,6 +1,6 @@
 ---
 name: cs-feat-accept
-description: feature 流程阶段 3——验收闭环：对照 design 核实现 + review 报告 + QA 报告或验收现场验证证据 + 盘点 cs-domain 候选（提示而非代写）+ 回写 requirement / roadmap，最后产出 {slug}-acceptance.md。触发：用户说"功能写完了验收一下"、"做最后检查"、"准备 merge"、"出验收报告"。前置依赖 cs-feat-impl 完成、cs-code-review 通过；如果未单独执行 cs-feat-qa，accept 必须现场补齐同等验证证据。
+description: feature 流程阶段 3——验收闭环：对照 design 核实现 + review 报告 + QA 报告或验收现场验证证据 + 盘点 cs-domain 候选（提示而非代写）+ 回写 requirement / roadmap，最后产出 {slug}-acceptance.md；可选只读 acceptance auditor 辅助复核，但最终状态写入由本技能负责。触发：用户说"功能写完了验收一下"、"做最后检查"、"准备 merge"、"出验收报告"。
 ---
 
 # cs-feat-accept
@@ -21,6 +21,8 @@ description: feature 流程阶段 3——验收闭环：对照 design 核实现 
 **验收原则**：acceptance 是最终审计，不是实现汇报的整理。要重新读取原始 design 和 checklist，以最终工作区为准逐项复验；实现阶段说通过只能当线索，不能当结论。发现缺口要先修代码 / 方案 / 文档并重验，再写通过。
 
 **推进原则**：验收阶段要用仓库事实关闭任务，而不是用对话自述关闭任务。最终结论必须回答四个问题：原始契约是否满足、验证证据是否足够且在最终状态仍成立、承诺交付物是否真实落盘、这次学到的可复用知识是否进入 CodeStable 的沉淀出口。
+
+**独立审计边界**：可启动只读 acceptance auditor 复核 design/checklist/review/QA/final diff 和状态回写候选，尤其是高风险或 goal 模式 feature；但 auditor 只能返回 findings，不得写 `{slug}-acceptance.md`、checklist、roadmap、requirement 或状态文件。acceptance 是流程关闭动作，最终 verdict、状态推进和文件写入必须由当前主流程 owner 完成。
 
 **没产出报告 = 工作流未完成**。后人查"上次这个功能验收时确认了哪些行为"，没报告就只能翻 git diff 重新推断。
 

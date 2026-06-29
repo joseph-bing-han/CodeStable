@@ -71,6 +71,21 @@ def make_completed_feature_unit(repo: Path) -> Path:
     return unit
 
 
+def make_completed_feature_unit_with_subagent_ocr(repo: Path) -> Path:
+    unit = make_feature_unit(repo)
+    (unit / "demo-checklist.yaml").write_text(
+        "steps:\n"
+        "  - id: one\n"
+        "    status: done\n",
+        encoding="utf-8",
+    )
+    (unit / "demo-review.md").write_text(
+        "reviewer: subagent+ocr\nfindings: none\n",
+        encoding="utf-8",
+    )
+    return unit
+
+
 def approved_override(unit: Path) -> None:
     (unit / "worktree-override.md").write_text(
         "reason: test\nscope: demo\napproval: approved\n",
@@ -302,6 +317,23 @@ def test_finish_gate_blocks_default_branch(tmp_path: Path) -> None:
 
     assert not payload["ok"]
     assert any("linked execution worktree" in finding["message"] for finding in payload["findings"])
+
+
+def test_finish_gate_accepts_subagent_ocr_review_evidence(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path)
+    make_completed_feature_unit_with_subagent_ocr(repo)
+    run(repo, "add", ".codestable")
+    run(repo, "commit", "-m", "add completed unit")
+    worktree = tmp_path / "repo-worktree"
+    run(repo, "worktree", "add", "-b", "feat/demo", worktree.as_posix())
+    (worktree / "src").mkdir()
+    (worktree / "src/app.py").write_text("print('x')\n", encoding="utf-8")
+    run(worktree, "add", "src/app.py")
+    run(worktree, "commit", "-m", "implement demo")
+
+    payload = finish_gate.finish(worktree, ".codestable/features/2026-06-03-demo", ["pytest -> passed"])
+
+    assert payload["ok"]
 
 
 def test_finish_gate_creates_learning_report_and_cross_worktree_inbox(tmp_path: Path) -> None:

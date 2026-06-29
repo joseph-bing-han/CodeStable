@@ -117,6 +117,25 @@ def test_review_evidence_satisfies_completed_feature(tmp_path: Path, monkeypatch
     assert findings == []
 
 
+def test_subagent_ocr_review_evidence_satisfies_completed_feature(tmp_path: Path, monkeypatch) -> None:
+    repo = init_repo(tmp_path)
+    monkeypatch.setenv("CODESTABLE_ALLOW_MAIN_CHECKOUT_IMPLEMENTATION", "1")
+    unit = repo / ".codestable/features/2026-05-25-demo"
+    unit.mkdir(parents=True)
+    (unit / "demo-checklist.yaml").write_text(
+        "steps:\n"
+        "  - id: one\n"
+        "    status: done\n",
+        encoding="utf-8",
+    )
+    (unit / "demo-review.md").write_text("reviewer: subagent+ocr\n", encoding="utf-8")
+
+    ok, findings, _meta = gate.validate(repo)
+
+    assert ok
+    assert findings == []
+
+
 def test_self_review_evidence_requires_explicit_fallback(tmp_path: Path, monkeypatch) -> None:
     repo = init_repo(tmp_path)
     monkeypatch.setenv("CODESTABLE_ALLOW_MAIN_CHECKOUT_IMPLEMENTATION", "1")
