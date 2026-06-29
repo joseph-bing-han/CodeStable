@@ -1,4 +1,4 @@
 interface:
   display_name: "cs-goal"
-  short_description: "Run goals through reports and acceptance."
-  default_prompt: "Use $cs-goal for a bounded start/end objective: create a dated goal directory, grill lightly, write start and iteration reports in the project's report language, iterate autonomously, and require Task agent functional acceptance before completion."
+  short_description: "用报告和 Task agent 功能验收推进有界 goal"
+  default_prompt: "使用 $cs-goal 处理有界起点/终点目标：创建带日期的 goal 目录，轻量 grill，按项目报告语言写起点和 iteration 报告，自主迭代，并在完成前要求 Task agent 功能验收。"

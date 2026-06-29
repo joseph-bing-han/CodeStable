@@ -1,27 +1,23 @@
-# Goal Conventions
+# Goal 约定
 
-This file is copied by `cs-onboard` to
-`.codestable/reference/goal-conventions.md`. It defines the shared runtime shape
-for `cs-goal`.
+本文件会由 `cs-onboard` 复制到 `.codestable/reference/goal-conventions.md`。它定义
+`cs-goal` 的共享运行形态。
 
-## Purpose
+## 用途
 
-Goals are bounded start/end work units. The owner defines the outcome and
-acceptance signal; AI interviews / grills briefly, writes a start report,
-implements, verifies, self-iterates, and writes iteration reports. A goal can
-close only after Task agent functional acceptance of the produced result.
+Goal 是有界起点/终点工作单元。owner 定义结果和验收信号；AI 简短 interview / grill，
+写起点报告，实现、验证、自主迭代，并写 iteration 报告。只有 Task agent 对产出结果做完
+功能验收后，goal 才能关闭。
 
-Use goals when the request says "reach this result", "run until accepted",
-"self-iterate", "AI implements autonomously", or "grill me first".
+当请求是“达成这个结果”、“跑到被验收”、“自主迭代”、“AI 自主实现”或“先 grill me”时，
+使用 goal。
 
-## Report Language
+## 报告语言
 
-All goal report prose follows `.codestable/attention.md`. If attention has no
-report language policy, use the owner's current conversation language. Do not
-hard-code required two-language report pairs in this shared convention.
+所有 goal 报告正文遵守 `.codestable/attention.md`。如果 attention 没有报告语言策略，
+使用 owner 当前对话语言。不要在共享约定中硬编码必须双语。
 
-Use the canonical unsuffixed files below by default. Add language-suffixed
-copies only when attention explicitly requires multiple language copies.
+默认使用下列无后缀 canonical 文件。只有 attention 明确要求多语言副本时，才添加语言后缀副本。
 
 ## Directory
 
@@ -34,20 +30,17 @@ copies only when attention explicitly requires multiple language copies.
     └── 001.md
 ```
 
-The directory date is the goal creation date. `state.yaml.goal` remains the bare
-slug so humans and agents can compare related dated units without parsing the
-filesystem name.
+目录日期是 goal 创建日期。`state.yaml.goal` 保留裸 slug，方便人和 agent 在不解析文件系统
+名称的情况下比较相关 dated unit。
 
-`state.yaml` is the machine source of truth. Markdown is human-readable context.
-Recovery priority is `state.yaml` > latest iteration frontmatter > Markdown
-body.
+`state.yaml` 是机器 source of truth。Markdown 是面向人的上下文。恢复优先级是：
+`state.yaml` > latest iteration frontmatter > Markdown body。
 
-`functional-acceptance.md` is created only during the terminal acceptance gate,
-not as an empty file at goal start.
+`functional-acceptance.md` 只在终端验收 gate 创建，不在 goal 开始时创建空文件。
 
-`goal.md` is the start report from interview / grill. It must exist before
-implementation and include objective, start point, acceptance, non-goals, owner
-decisions, unresolved assumptions, and next action.
+`goal.md` 是 interview / grill 产生的起点报告。它必须在实现前存在，并包含 objective、
+start point、acceptance、non-goals、owner decisions、unresolved assumptions 和
+next action。
 
 ## State Model
 
@@ -55,7 +48,7 @@ decisions, unresolved assumptions, and next action.
 active | complete | blocked
 ```
 
-Required `state.yaml` fields:
+必需的 `state.yaml` 字段：
 
 - `schema_version`
 - `goal`
@@ -72,53 +65,47 @@ Required `state.yaml` fields:
 - `owner_stop`
 - `updated_at`
 
-`current_iteration` means the last completed iteration, not the next
-in-progress attempt.
+`current_iteration` 表示最后一个已完成 iteration，不表示下一次进行中的尝试。
 
-## Iteration Numbering
+## Iteration 编号
 
-Before changing `current_iteration`, compute the next `{nnn}` as:
+修改 `current_iteration` 前，按以下方式计算下一个 `{nnn}`：
 
 ```text
 max(state.yaml.current_iteration, highest existing iterations/{nnn}*.md) + 1
 ```
 
-Write `iterations/{nnn}.md`, then leave `state.yaml.current_iteration` equal to
-that completed number. Never overwrite an existing iteration file. If attention
-requires language variants, write the corresponding `iterations/{nnn}.{lang}.md`
-copies as well.
+写入 `iterations/{nnn}.md` 后，让 `state.yaml.current_iteration` 等于该已完成编号。
+不要覆盖已有 iteration 文件。如果 attention 要求语言变体，同时写对应的
+`iterations/{nnn}.{lang}.md` 副本。
 
-## Reporting
+## 报告
 
-Each completed iteration writes the canonical report:
+每个已完成 iteration 写 canonical 报告：
 
 - `iterations/{nnn}.md`
 
-Reports are not command logs. One iteration equals a coherent implementation and
-verification attempt. Include the same semantic content even when attention
-requires extra language variants: understanding, implementation approach,
-changes, verification evidence, problems, next attempt, and state update.
+报告不是命令日志。一次 iteration 等于一次连贯的实现与验证尝试。即使 attention 要求额外
+语言变体，也要包含相同语义内容：understanding、implementation approach、changes、
+verification evidence、problems、next attempt 和 state update。
 
-Before `status: complete`, write:
+在 `status: complete` 前写：
 
 - `functional-acceptance.md`
 
-This report records Task agent functional acceptance of the product / artifact
-against the owner acceptance criteria. Include reviewer, scope, functional
-evidence, verdict, residual risks, and the final iteration that cites it. Tests
-alone are not enough to complete a goal.
+该报告记录 Task agent 根据 owner acceptance criteria 对产品 / 产物做的功能验收。包括
+reviewer、scope、functional evidence、verdict、residual risks，以及引用它的 final
+iteration。只有测试不足以完成 goal。
 
-## Strict Owner Stops
+## 严格 Owner Stop
 
-Stop only when:
+只在以下情况停止：
 
-- acceptance criteria conflict;
-- objective / start / terminal condition has major ambiguity;
-- continuing changes long-lived specs, public contract, or capability boundary
-  beyond the recorded goal;
-- the same blocker repeats for three consecutive iterations;
-- budget is exhausted or nearly exhausted;
-- risk acceptance, secrets, destructive action, external purchase, merge, or
-  deployment approval is required.
+- acceptance criteria 冲突。
+- objective / start / terminal condition 有重大歧义。
+- 继续会改变记录 goal 之外的长期 spec、public contract 或 capability boundary。
+- 同一个 blocker 连续三次 iteration 重复。
+- budget 已用尽或接近用尽。
+- 需要风险接受、secrets、破坏性操作、外部购买、merge 或 deployment 批准。
 
-Routine technical choices and ordinary failed attempts stay AI-owned.
+日常技术选择和普通失败尝试由 AI 负责。

@@ -1,40 +1,36 @@
-# Approval Conventions
+# Approval 约定
 
-This file is copied by `cs-onboard` to
-`.codestable/reference/approval-conventions.md`. It owns the global rule for
-human approval reports.
+本文件会由 `cs-onboard` 复制到 `.codestable/reference/approval-conventions.md`。它负责
+human approval report 的全局规则。
 
-## Core Rule
+## 核心规则
 
-Before asking the owner to choose, approve, authorize, accept risk, sign off,
-merge, deploy, override a gate, or answer an interview / grill checkpoint, write
-a human-readable approval report in the relevant `.codestable` unit.
+在要求 owner 做选择、批准、授权、接受风险、sign off、merge、deploy、override gate，或回答
+interview / grill checkpoint 前，先在相关 `.codestable` unit 写一份人可读的 approval
+report。
 
-Canonical stage reports can satisfy this rule when they already contain the
-decision, options, recommendation, tradeoffs, evidence, consequence, and next
-action. Examples:
+canonical stage report 如果已经包含 decision、options、recommendation、tradeoffs、
+evidence、consequence 和 next action，就可以满足此规则。例如：
 
 - `cs-feat-design` design review;
 - `cs-issue-analyze` fix-option analysis;
 - `cs-issue-fix` fix-note / implementation review;
 - `cs-feat-accept` acceptance report.
 
-When no such stage report exists, write:
+如果不存在这样的 stage report，写：
 
 ```text
 {unit}/approval-report.md
 ```
 
-Do not ask a bare multi-choice question when the decision needs context.
+需要上下文的决策，不要只问裸多选题。
 
-Use the report language policy from `.codestable/attention.md` for prose. If
-attention has no report language policy, use the owner's current conversation
-language. Keep the heading names stable so agents can parse the report
-reliably.
+正文语言遵守 `.codestable/attention.md` 的报告语言策略。若 attention 没有报告语言策略，
+使用 owner 当前对话语言。标题名保持稳定，便于 agent 可靠解析。
 
-## Unit Path
+## Unit 路径
 
-Use the closest durable workflow directory:
+使用最近的持久 workflow 目录：
 
 - goal: `.codestable/goals/YYYY-MM-DD-{slug}/approval-report.md`
 - feature: `.codestable/features/YYYY-MM-DD-{slug}/approval-report.md`
@@ -47,19 +43,18 @@ Use the closest durable workflow directory:
 - unknown route: create or choose the unit first; if impossible, stop and ask
   only for the missing unit identity.
 
-## Triggers
+## 触发条件
 
-Write `approval-report.md` for:
+以下情况写 `approval-report.md`：
 
-- interview / grill checkpoints whose answer changes route, scope, or next work;
-- route choice between plausible workflows or canonical specs;
-- review authorization, implementation Task agent authorization, or inline-review fallback;
-- worktree override, gate override, destructive action, secrets, external purchase,
-  merge, deploy, or risk acceptance;
-- blocker / owner-stop decisions;
-- choosing what to fix, defer, drop, migrate, or rehabilitate.
+- 答案会改变 route、scope 或 next work 的 interview / grill checkpoint。
+- 在多个可行 workflow 或 canonical spec 之间做 route choice。
+- review authorization、implementation Task agent authorization 或 inline-review fallback。
+- worktree override、gate override、破坏性操作、secrets、外部购买、merge、deploy 或风险接受。
+- blocker / owner-stop 决策。
+- 选择要修复、延期、丢弃、迁移或修复历史文档的内容。
 
-## Template
+## 模板
 
 ```markdown
 ---
@@ -91,21 +86,19 @@ created_at: YYYY-MM-DD
 ## After You Answer
 ```
 
-Omit `Decision History` for the first approval in a unit. `Options` should be
-concrete and mutually exclusive. Mark the recommended option explicitly.
-`Non-Automatic Actions` must say what will not happen automatically, such as
-commit, merge, deploy, rewrite long-lived specs, or accept risk.
+一个 unit 的第一次 approval 可以省略 `Decision History`。`Options` 要具体且互斥。明确标出
+推荐选项。`Non-Automatic Actions` 必须说明哪些动作不会自动发生，例如 commit、merge、
+deploy、重写长期 specs 或接受风险。
 
-## After Approval
+## Approval 之后
 
-After the owner answers:
+owner 回答后：
 
-1. update `status` to `approved`, `rejected`, or `superseded`;
-2. record the selected option and answer date;
-3. continue from `After You Answer`;
-4. keep the report as history instead of deleting it.
+1. 把 `status` 更新为 `approved`、`rejected` 或 `superseded`。
+2. 记录选中的 option 和 answer date。
+3. 从 `After You Answer` 继续。
+4. 保留报告作为历史，不要删除。
 
-If the same unit later needs another approval, reuse `approval-report.md` as the
-single approval surface: add a dated decision-history entry for the old answer,
-then replace the pending sections with the new decision. Never silently
-overwrite an unresolved pending approval.
+如果同一个 unit 后续还需要 approval，复用 `approval-report.md` 作为唯一 approval 表面：
+先为旧回答添加带日期的 decision-history 记录，再用新决策替换 pending sections。不要静默
+覆盖尚未解决的 pending approval。

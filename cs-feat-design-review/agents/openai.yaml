@@ -1,4 +1,4 @@
 interface:
   display_name: "CodeStable Feature Design Review"
-  short_description: "Feature design 人审前的独立 agent 审查"
+  short_description: "Feature design 人审前的 Task agent 审查"
   default_prompt: "使用 $cs-feat-design-review 在人工确认前审查 feature design 和 checklist。"

@@ -49,7 +49,7 @@ brainstorm 是讨论层独立入口，会分诊：case 1（清楚 → 直接 des
 |---|---|---|---|
 | 0 brainstorm（可选，独立入口） | `cs-brainstorm` | case 2 时产出 brainstorm note | AI 思考伙伴，用户拍板 |
 | 1 方案设计 | `cs-feat-design` | design.md + checklist.yaml | AI 起草候选方案 |
-| 1.5 方案审查 | `cs-feat-design-review` | design-review.md | 独立 agent / AI 人审前审查 |
+| 1.5 方案审查 | `cs-feat-design-review` | design-review.md | Task agent / AI 人审前审查 |
 | 2 分步实现 | `cs-feat-impl` | 代码 + 阶段汇报 | AI 按方案执行 |
 | 2.5 代码审查 | `cs-code-review` | review.md | AI 只读审查，用户决定是否修 |
 | 2.6 QA 验证 | `cs-feat-qa` | qa.md | AI 运行证据，用户确认风险 |

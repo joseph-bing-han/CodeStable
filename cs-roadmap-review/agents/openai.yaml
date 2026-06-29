@@ -1,4 +1,4 @@
 interface:
   display_name: "CodeStable Roadmap Review"
-  short_description: "Roadmap 人审前的独立 agent 规划审查"
+  short_description: "Roadmap 人审前的 Task agent 规划审查"
   default_prompt: "使用 $cs-roadmap-review 在人工确认前审查已起草的 roadmap。"

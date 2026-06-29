@@ -1,49 +1,45 @@
 ---
 name: cs-goal
-description: Goal-driven autonomous workflow for bounded start/end tasks. Use when the owner gives a desired outcome, acceptance result, budget, or asks AI to "reach this goal", "run until accepted", "self-iterate", "autonomous iteration", or "grill me" before implementation. Creates start, iteration, and functional acceptance artifacts under `.codestable/goals/`; report prose follows `.codestable/attention.md`.
+description: 有界起点/终点目标的自主迭代流程。触发：owner 给出期望结果、验收结果、预算，或要求 AI "达成这个 goal"、"一直跑到验收"、"自主迭代"、"先 grill me 再实现"。在 `.codestable/goals/` 下创建起点、iteration 和功能验收产物；报告正文遵守 `.codestable/attention.md`。
 ---
 
 # cs-goal
 
-`cs-goal` handles bounded goals: the owner gives the starting point and desired
-end state, then CodeStable interviews / grills lightly, writes a start report
-before implementation, implements autonomously, verifies, requests Task agent
-functional acceptance before completion, and writes iteration reports. Report
-prose follows the project's report language policy in `.codestable/attention.md`;
-if no policy exists, use the owner's current conversation language.
+`cs-goal` 处理有界 goal：owner 给出起点和期望终态，CodeStable 先做轻量
+interview / grill，动手前写起点报告，然后自主实现、验证、迭代；完成前必须请求
+Task agent 做功能验收，并写 iteration 报告。报告正文遵守
+`.codestable/attention.md` 中的项目报告语言；没有语言策略时，使用 owner 当前对话语言。
 
-This is a goal wrapper, not a replacement for feature / issue / refactor rules.
-When the goal crosses a capability boundary, exposes a bug root cause, or needs
-behavior-preserving refactor governance, create or reference the matching
-feature / issue / refactor artifacts inside the goal iteration.
+这是 goal 包装器，不替代 feature / issue / refactor 规则。goal 跨 capability
+boundary、暴露 bug root cause，或需要行为不变的 refactor governance 时，要在 goal
+iteration 中创建或引用对应 feature / issue / refactor 产物。
 
-Read `reference.md` for artifact templates, `state.yaml` schema, report
-headings, and recovery rules.
+产物模板、`state.yaml` schema、报告标题和恢复规则见 `reference.md`。
 
 ---
 
-## Startup
+## 启动
 
-Before acting:
+行动前：
 
-1. Read `.codestable/attention.md`.
-2. Read `.codestable/reference/system-overview.md` if present.
-3. Read this skill's `reference.md`.
-4. Read `.codestable/reference/goal-conventions.md` if present.
-5. Read `.codestable/reference/approval-conventions.md` if present.
-6. Before code edits, review, commit, finish, or merge work, read
-   `.codestable/reference/execution-conventions.md` if present.
-7. Inspect `.codestable/goals/` for an active matching goal.
-8. Search `.codestable/compound/` and relevant feature / issue / refactor docs
-   when the goal names an existing area.
+1. 读取 `.codestable/attention.md`。
+2. 如果存在，读取 `.codestable/reference/system-overview.md`。
+3. 读取本技能的 `reference.md`。
+4. 如果存在，读取 `.codestable/reference/goal-conventions.md`。
+5. 如果存在，读取 `.codestable/reference/approval-conventions.md`。
+6. 代码编辑、review、commit、finish 或 merge 前，如果存在，读取
+   `.codestable/reference/execution-conventions.md`。
+7. 检查 `.codestable/goals/` 中是否已有匹配的 active goal。
+8. 当 goal 指向已有领域时，搜索 `.codestable/compound/` 和相关 feature / issue /
+   refactor 文档。
 
-If `.codestable/` is missing, route to `cs-onboard`.
+如果缺少 `.codestable/`，路由到 `cs-onboard`。
 
 ---
 
-## When To Use
+## 使用场景
 
-Use `cs-goal` when the owner expresses a bounded destination:
+owner 表达有界目标时使用 `cs-goal`：
 
 - "starting from this broken state, make the tests pass";
 - "reach this acceptance result";
@@ -52,66 +48,61 @@ Use `cs-goal` when the owner expresses a bounded destination:
 - "grill me first, then implement";
 - "I care about the outcome, not the technical choices".
 
-Do not use it for:
+不要用于：
 
-- pure design, roadmap, or discussion requests with no implementation goal;
-- open-ended brainstorming where the owner does not yet know the end state;
-- status checks or audits that do not ask the AI to drive toward completion.
+- 没有实现目标的纯 design、roadmap 或讨论请求。
+- owner 还不知道终态的开放式 brainstorm。
+- 不要求 AI 推进到完成的状态检查或 audit。
 
 ---
 
-## State Model
+## 状态模型
 
-Mirror Codex's simple goal state:
+沿用 Codex 简单 goal 状态：
 
 ```text
 active | complete | blocked
 ```
 
-`state.yaml` is the machine source of truth. Markdown is for humans. Recovery
-priority is:
+`state.yaml` 是机器 source of truth，Markdown 面向人。恢复优先级：
 
 1. `.codestable/goals/YYYY-MM-DD-{slug}/state.yaml`
 2. latest iteration frontmatter
 3. Markdown body text
 
-Never infer the current machine state from report prose when `state.yaml` has a
-clear value.
+只要 `state.yaml` 有明确值，就不要从报告正文推断当前机器状态。
 
 ---
 
-## Phase 1: Grill Alignment
+## 阶段 1：Grill 对齐
 
-Always grill before creating a new goal. Treat interview / grill as the formal
-goal start point, not disposable chat. Keep it short and owner-level.
+创建新 goal 前总是先 grill。把 interview / grill 视为正式 goal 起点，不是一次性聊天。
+保持简短，聚焦 owner 层面的信息。
 
-Ask at most 3-5 focused questions. Each round uses one question plus 2-4
-meaningfully different choices. Avoid asking for implementation details unless
-the answer changes the goal boundary.
+最多问 3-5 个聚焦问题。每轮一个问题，配 2-4 个有实质差异的选项。除非答案会改变 goal
+边界，否则不要问实现细节。
 
-If a grill answer requires owner approval of scope, route, budget, risk, or
-stopping policy and the options need explanation, first write
-`.codestable/goals/YYYY-MM-DD-{slug}/approval-report.md`. A simple clarifying
-question can stay in chat; a decision checkpoint needs the report.
+如果 grill 答案需要 owner 批准范围、路线、预算、风险或停止策略，且选项需要解释，先写
+`.codestable/goals/YYYY-MM-DD-{slug}/approval-report.md`。简单澄清问题可以留在
+chat；决策 checkpoint 必须有报告。
 
-Collect only:
+只收集：
 
-- objective;
-- starting point;
-- acceptance / done signal;
-- non-goals;
-- budget or stopping preference if given;
-- strict owner-stop conditions that are specific to this goal.
+- objective。
+- starting point。
+- acceptance / done signal。
+- non-goals。
+- 已给出的 budget 或 stopping preference。
+- 本 goal 特有的 strict owner-stop conditions。
 
-If the owner already gave enough information, summarize it and proceed.
-Before any code edit or autonomous implementation attempt, Phase 2 must create
-or refresh the start report.
+如果 owner 已给足信息，先总结再继续。任何代码编辑或自主实现尝试前，阶段 2 必须创建或
+刷新起点报告。
 
 ---
 
-## Phase 2: Create Or Resume Goal
+## 阶段 2：创建或恢复 Goal
 
-Goal directory over its lifecycle:
+goal 生命周期目录：
 
 ```text
 .codestable/goals/YYYY-MM-DD-{slug}/
@@ -121,135 +112,111 @@ Goal directory over its lifecycle:
 └── iterations/
 ```
 
-Use the goal creation date in the directory name, matching feature / issue /
-refactor directory style. Keep the `state.yaml` `goal` field as the bare
-business slug.
+目录名使用 goal 创建日期，保持和 feature / issue / refactor 目录风格一致。
+`state.yaml` 的 `goal` 字段保留裸业务 slug。
 
-Create the functional acceptance report only during the terminal acceptance
-gate, not as an empty file at goal start.
+`functional-acceptance.md` 只在终端验收 gate 创建，不在 goal 开始时创建空文件。
 
-`goal.md` is the durable start report from the interview / grill. It must exist
-before implementation. Include objective, starting point, acceptance criteria,
-non-goals, owner decisions, unresolved assumptions, and next action. Keep it
-concise and update it only when the goal boundary or state changes.
+`goal.md` 是从 interview / grill 生成的持久起点报告，必须在实现前存在。内容包括
+objective、starting point、acceptance criteria、non-goals、owner decisions、
+unresolved assumptions 和 next action。保持简洁，只在 goal 边界或状态变化时更新。
 
-Use canonical unsuffixed report paths by default. If `.codestable/attention.md`
-explicitly requires additional language copies, add suffix copies such as
-`goal.{lang}.md`, `functional-acceptance.{lang}.md`, and
-`iterations/{nnn}.{lang}.md`; do not require those variants by default.
+默认使用无后缀 canonical 报告路径。如果 `.codestable/attention.md` 明确要求额外语言副本，
+再添加 `goal.{lang}.md`、`functional-acceptance.{lang}.md`、
+`iterations/{nnn}.{lang}.md` 这类后缀副本；默认不要求这些变体。
 
-If an active matching goal exists, resume it instead of creating a duplicate,
-even when its dated directory prefix differs from today's date.
-Read `state.yaml`, existing start reports matching `goal*.md`, then the latest
-`iterations/{nnn}*.md`. If the start report is missing, reconstruct it from
-state and interview evidence before code edits.
+如果已有匹配的 active goal，要恢复它而不是创建重复目录，即使日期前缀不是今天。先读
+`state.yaml`，再读匹配 `goal*.md` 的起点报告，然后读最新的
+`iterations/{nnn}*.md`。如果缺起点报告，代码编辑前先根据 state 和 interview 证据重建。
 
 ---
 
-## Phase 3: Autonomous Iteration
+## 阶段 3：自主迭代
 
-One iteration is a coherent implementation / verification attempt, not a single
-command.
+一次 iteration 是一次连贯的实现 / 验证尝试，不是一条命令。
 
-Loop while `state: active`:
+当 `state: active` 时循环：
 
-1. Choose the smallest useful next attempt from `state.yaml`.
-2. Implement using existing CodeStable constraints, including worktree, review,
-   spec-governance, and commit rules when they apply.
-3. Verify with fresh commands or evidence.
-4. Before changing `state.yaml.current_iteration`, derive the next zero-padded
-   iteration number from
-   `state.yaml.current_iteration` and existing `iterations/{nnn}*.md` files;
-   never overwrite a prior report.
-5. Update `state.yaml` for the completed attempt, leaving
-   `current_iteration: {n}`.
-6. Write the canonical report for that completed iteration:
-   `iterations/{nnn}.md`. Add language-suffixed copies only when
-   `.codestable/attention.md` requires them.
-7. Continue autonomously unless an owner-stop condition fires.
+1. 从 `state.yaml` 选择最小有用的下一次尝试。
+2. 按既有 CodeStable 约束实现；适用时包括 worktree、review、spec-governance 和
+   commit 规则。
+3. 用 fresh 命令或证据验证。
+4. 修改 `state.yaml.current_iteration` 前，根据 `state.yaml.current_iteration` 和已有
+   `iterations/{nnn}*.md` 文件推导下一个三位数 iteration 编号；不要覆盖旧报告。
+5. 为已完成尝试更新 `state.yaml`，留下 `current_iteration: {n}`。
+6. 写该次完成 iteration 的 canonical 报告：`iterations/{nnn}.md`。只有
+   `.codestable/attention.md` 要求时才添加语言后缀副本。
+7. 除非触发 owner-stop 条件，否则自主继续。
 
-Do not write reports after every command. Reports are iteration summaries.
-Do not mark a goal complete from ordinary test evidence alone; run the terminal
-functional acceptance gate first.
+不要每条命令后都写报告；报告是 iteration 摘要。不要仅凭普通测试证据把 goal 标成完成；
+必须先运行终端功能验收 gate。
 
-## Terminal Functional Acceptance
+## 终端功能验收
 
-Before changing `state.yaml.status` to `complete`:
+把 `state.yaml.status` 改为 `complete` 前：
 
-1. Run normal verification with fresh evidence.
-2. Dispatch a Task agent to perform functional acceptance against the recorded
-   owner acceptance criteria and actual product / artifact behavior.
-3. Record the result in `functional-acceptance.md`, including reviewer, scope,
-   acceptance checks, functional evidence, verdict, residual risks, and any
-   follow-up.
-4. Reference the functional acceptance report in the final iteration.
+1. 用 fresh evidence 跑正常验证。
+2. 按 `.codestable/reference/execution-conventions.md` 的 Task agent 选择规则启动
+   Task agent，对记录的 owner acceptance criteria 和实际产品 / 产物行为做功能验收。
+3. 把结果写入 `functional-acceptance.md`，包括 reviewer、scope、acceptance checks、
+   functional evidence、verdict、residual risks 和 follow-up。
+4. 在 final iteration 中引用功能验收报告。
 
-Functional acceptance is product-facing evidence. It may include black-box usage,
-artifact inspection, UI / API workflow checks, fixture output review, or another
-owner-relevant proof. Unit tests, linters, and build checks are useful evidence
-but are not enough by themselves.
+功能验收是面向产品的证据。它可以包括黑盒使用、产物检查、UI / API workflow 检查、
+fixture 输出复核，或其他和 owner 相关的证明。单测、lint 和 build 是有用证据，但单独
+不足以完成 goal。
 
-If Task agent dispatch is unavailable or not authorized, owner-stop with
-`approval-report.md`; do not self-accept the goal as complete.
+如果 Task agent 无法启动或未获授权，写 `approval-report.md` 并 owner-stop；不要自验收
+goal 为 complete。
 
-## Strict Owner Stops
+## 严格 Owner Stop
 
-Stop and ask the owner only when:
+只有以下情况才停下来问 owner：
 
-- acceptance criteria conflict or are no longer enough to decide completion;
-- the objective, start point, or terminal condition has a major ambiguity;
-- continuing would change long-lived specs, public contract, or capability
-  boundary beyond the recorded goal;
-- the same blocker repeats for three consecutive iterations;
-- budget is exhausted or nearly exhausted;
-- the next step requires explicit human risk acceptance, secrets, destructive
-  action, external purchase, or merge / deployment approval.
+- acceptance criteria 冲突，或已不足以判断完成。
+- objective、start point 或 terminal condition 存在重大歧义。
+- 继续会改变记录 goal 之外的长期 spec、public contract 或 capability boundary。
+- 同一个 blocker 连续三次 iteration 重复出现。
+- budget 已用尽或接近用尽。
+- 下一步需要明确的人类风险接受、secrets、破坏性操作、外部购买、merge / deployment 批准。
 
-Normal technical choices, test failures, implementation alternatives, and local
-refactors are AI-owned unless they cross one of the stops above.
+普通技术选择、测试失败、实现备选和局部 refactor 由 AI 负责，除非跨过以上 stop 条件。
 
 ---
 
-## Completion And Blocked Rules
+## Complete 与 Blocked 规则
 
-Mark `complete` only when the acceptance signal is satisfied, the Task agent
-functional acceptance report records a passing verdict, and evidence is
-recorded in the final iteration.
+只有 acceptance signal 已满足、Task agent 功能验收报告记录 passing verdict，且证据已写入
+final iteration 时，才能标记 `complete`。
 
-Mark `blocked` only after the same blocker has repeated for at least three
-consecutive iterations or the owner-stop rule says the AI cannot safely proceed.
-Record `blocker_signature`, `blocker_count`, evidence, and the owner decision
-needed. Before asking the owner to decide, write `approval-report.md` in the goal
-directory unless the latest iteration report already contains the full decision
-context, options, recommendation, tradeoffs, evidence, consequence, and next
-action.
+只有同一个 blocker 至少连续三次 iteration 重复，或 owner-stop 规则说明 AI 无法安全继续时，
+才能标记 `blocked`。记录 `blocker_signature`、`blocker_count`、证据和需要的 owner
+决策。问 owner 决策前，先在 goal 目录写 `approval-report.md`，除非最新 iteration 报告已经
+包含完整决策上下文、选项、推荐、权衡、证据、后果和下一步。
 
-If budget ends before acceptance, stop with approval context instead of
-pretending completion.
+如果 budget 在验收前结束，带审批上下文停下，不要假装完成。
 
 ---
 
 ## Exit
 
-A goal run exits with one of:
+goal run 以下列状态之一退出：
 
-- `complete`: acceptance evidence, Task agent functional acceptance, and final
-  iteration written.
-- `blocked`: blocker evidence and owner question recorded.
-- `active`: iteration report written and next action recorded, but the current
-  turn or budget ends before more work can be done.
+- `complete`：acceptance evidence、Task agent 功能验收和 final iteration 均已写入。
+- `blocked`：blocker 证据和 owner 问题已记录。
+- `active`：iteration 报告和 next action 已记录，但当前回合或 budget 不足以继续。
 
-Final replies should be short and point to `goal.md`, the latest iteration
-report, and `functional-acceptance.md` when the goal is complete.
+最终回复要短；goal 完成时指向 `goal.md`、最新 iteration 报告和
+`functional-acceptance.md`。
 
 ---
 
 ## Guardrails
 
-- Do not ask the owner to choose routine technical details.
-- Do not let report prose override `state.yaml`.
-- Do not create duplicate active goals for the same objective.
-- Do not skip iteration reports after meaningful work.
-- Do not mark completion from tests alone or forge Task agent acceptance.
-- Do not keep iterating after a strict owner-stop fires.
-- Keep every Markdown artifact under 300 lines; split long reports.
+- 不让 owner 选择日常技术细节。
+- 不让报告正文覆盖 `state.yaml`。
+- 不为同一 objective 创建重复 active goal。
+- 有实质工作后不跳过 iteration 报告。
+- 不仅凭测试标记完成，也不伪造 Task agent 验收。
+- strict owner-stop 触发后不继续迭代。
+- 每个 Markdown 产物必须少于 300 行；过长就拆分。

@@ -163,7 +163,7 @@ def learner_report_text(
             "## 4. 关键决策",
             f"- `covered_head` 固定为 `{head}`；HEAD 变化后本报告失效。",
             "",
-            "## 5. Task Agent Review 发现与修复",
+            "## 5. Task agent review 发现与修复",
             "- 见同 unit 的 implementation review 记录；finish gate 只验证 evidence 是否存在。",
             "",
             "## 6. 验证证据",

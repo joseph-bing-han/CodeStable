@@ -1,16 +1,14 @@
-# cs-goal Reference
+# cs-goal 参考
 
-Use this file for templates and recovery rules after `cs-goal` triggers.
+`cs-goal` 触发后，用本文件查看模板和恢复规则。
 
-## Report Language
+## 报告语言
 
-Read `.codestable/attention.md` before writing reports. If it contains a report
-language policy, follow it. If it does not, use the owner's current conversation
-language. Do not hard-code a required two-language pair in this skill.
+写报告前读取 `.codestable/attention.md`。如果其中有报告语言策略，按策略执行；没有时使用
+owner 当前对话语言。不要在本技能中硬编码必须双语。
 
-Use canonical unsuffixed report paths by default. Add language-suffixed copies
-only when `.codestable/attention.md` explicitly asks for multiple language
-copies.
+默认使用无后缀 canonical 报告路径。只有 `.codestable/attention.md` 明确要求多语言副本时，
+才添加语言后缀副本。
 
 ## Directory
 
@@ -23,17 +21,14 @@ copies.
     └── 001.md
 ```
 
-`{slug}` is short English kebab-case, and the date is the goal creation date.
-The dated directory name is the filesystem unit; the `state.yaml` `goal` field
-remains the bare slug. Reuse an active matching goal instead of creating a
-duplicate.
+`{slug}` 是简短英文 kebab-case，日期是 goal 创建日期。带日期的目录名是文件系统 unit；
+`state.yaml` 的 `goal` 字段保留裸 slug。已有匹配 active goal 时复用，不创建重复目录。
 
-Create `functional-acceptance.md` only during the terminal acceptance gate, not
-as an empty file at goal start.
+`functional-acceptance.md` 只在终端验收 gate 创建，不在 goal 开始时创建空文件。
 
-If attention explicitly requires language variants, use suffix copies such as
-`goal.{lang}.md`, `functional-acceptance.{lang}.md`, and
-`iterations/{nnn}.{lang}.md`. `state.yaml` remains the machine source of truth.
+如果 attention 明确要求语言变体，使用 `goal.{lang}.md`、
+`functional-acceptance.{lang}.md` 和 `iterations/{nnn}.{lang}.md` 这类后缀副本。
+`state.yaml` 仍是机器 source of truth。
 
 ## state.yaml Schema
 
@@ -58,16 +53,15 @@ owner_stop: null
 updated_at: "YYYY-MM-DD"
 ```
 
-Recovery priority:
+恢复优先级：
 
 1. `state.yaml`
 2. latest iteration frontmatter
 3. Markdown body
 
-## Start Report
+## 起点报告
 
-`goal.md` is the durable start report produced from the interview / grill. It
-must exist before implementation begins and include:
+`goal.md` 是由 interview / grill 生成的持久起点报告，必须在实现开始前存在，并包含：
 
 - objective;
 - starting point;
@@ -77,29 +71,25 @@ must exist before implementation begins and include:
 - unresolved assumptions;
 - next action.
 
-These reports are human-readable context only. `state.yaml` remains the machine
-source of truth so later agents do not infer state from report prose.
+这些报告只是面向人的上下文。`state.yaml` 仍是机器 source of truth，避免后续 agent 从
+报告正文推断状态。
 
-## Next Iteration Number
+## 下一个 Iteration 编号
 
-`state.yaml.current_iteration` means the last completed iteration, not the next
-in-progress attempt.
+`state.yaml.current_iteration` 表示最后一个已完成 iteration，不表示下一次进行中的尝试。
 
-Before changing `current_iteration`, compute the next `{nnn}` as:
+修改 `current_iteration` 前，按以下方式计算下一个 `{nnn}`：
 
 ```text
 max(state.yaml.current_iteration, highest existing iterations/{nnn}*.md) + 1
 ```
 
-Format it with three digits, write `iterations/{nnn}.md`, then leave
-`state.yaml.current_iteration` equal to that completed number. Never overwrite
-an existing iteration file. Add language-suffixed copies only when attention
-requires them.
+用三位数格式写入 `iterations/{nnn}.md`，然后让 `state.yaml.current_iteration` 等于该
+已完成编号。不要覆盖已有 iteration 文件。只有 attention 要求时才添加语言后缀副本。
 
 ## goal.md Template
 
-Use headings in the project's report language while preserving these section
-semantics:
+标题使用项目报告语言，但保留这些章节语义：
 
 ```markdown
 ---
@@ -139,10 +129,9 @@ updated_at: "YYYY-MM-DD"
 ---
 ```
 
-## Iteration Headings
+## Iteration 标题
 
-Use headings in the project's report language while preserving these section
-semantics:
+标题使用项目报告语言，但保留这些章节语义：
 
 ```markdown
 # Iteration 001
@@ -162,38 +151,36 @@ semantics:
 ## State Update
 ```
 
-## Iteration Rules
+## Iteration 规则
 
-- Write reports only at iteration end.
-- Include fresh verification evidence, even when the iteration failed.
-- If nothing changed, say so and explain what was learned.
-- Keep historical failed attempts in iteration reports; do not rewrite them into
-  success.
-- Update `state.yaml` with the iteration report so resume sees the same
-  completed iteration, next action, and status that humans read.
+- 只在 iteration 结束时写报告。
+- 即使 iteration 失败，也要包含 fresh verification evidence。
+- 如果没有改动，明确说明并解释学到了什么。
+- 保留历史失败尝试，不要把它们改写成成功。
+- 和 iteration 报告同步更新 `state.yaml`，让恢复时看到的人读状态、已完成 iteration 和
+  next action 一致。
 
-## Functional Acceptance Report
+## 功能验收报告
 
-Before `status: complete`, dispatch a Task agent for product-facing functional
-acceptance. Record the result in `functional-acceptance.md`.
+在 `status: complete` 前，按 `.codestable/reference/execution-conventions.md` 的
+Task agent 选择规则启动 Task agent，做面向产品的功能验收。结果写入
+`functional-acceptance.md`。
 
-The report must include:
+报告必须包含：
 
-- reviewer and Task agent role;
-- acceptance criteria checked;
-- functional evidence beyond tests alone;
-- verdict: pass, fail, or inconclusive;
-- residual risks and follow-up;
-- the final iteration that cites this acceptance.
+- reviewer 和 Task agent role。
+- 已检查的 acceptance criteria。
+- 测试之外的 functional evidence。
+- verdict：pass、fail 或 inconclusive。
+- residual risks 和 follow-up。
+- 引用本次验收的 final iteration。
 
-Tests, linters, and builds are verification evidence, but completion requires
-Task agent functional acceptance. If Task agent dispatch is unavailable or not
-authorized, write `approval-report.md` and owner-stop instead of marking the
-goal complete.
+测试、lint 和 build 是验证证据，但完成必须有 Task agent 功能验收。若 Task agent 无法启动
+或未授权，写 `approval-report.md` 并 owner-stop，不要把 goal 标为 complete。
 
-## Owner Stop Record
+## Owner Stop 记录
 
-When stopping, update `state.yaml`:
+停止时更新 `state.yaml`：
 
 ```yaml
 status: blocked
@@ -203,16 +190,14 @@ owner_stop: "{question or approval needed}"
 next_action: "Wait for owner decision on {topic}."
 ```
 
-The latest iteration report must explain:
+最新 iteration 报告必须说明：
 
-- what decision is needed;
-- why AI cannot safely continue;
-- options or expected answer shape;
-- what will happen after the owner answers.
+- 需要什么决策。
+- 为什么 AI 不能安全继续。
+- 选项或期望回答形态。
+- owner 回答后会发生什么。
 
-## Relationship To Other Flows
+## 与其他流程的关系
 
-`cs-goal` may create or reference feature, issue, refactor, roadmap, or decision
-artifacts when their rules apply. The goal state remains the wrapper for
-autonomous iteration; child artifacts remain the source of truth for their own
-workflow.
+适用规则时，`cs-goal` 可以创建或引用 feature、issue、refactor、roadmap 或 decision
+产物。goal state 仍是自主迭代的包装层；子产物仍是各自 workflow 的 source of truth。
