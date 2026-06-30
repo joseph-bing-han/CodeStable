@@ -12,7 +12,7 @@ description: Feature design。触发：新功能已清楚，需要起草 design/
 这一阶段的产出是一份方案文件 `{slug}-design.md`，加上从中抽出的行动清单 `{slug}-checklist.yaml`，以及人审前的 `{slug}-design-review.md`。这些东西后面会被 implement / code review / QA / acceptance 消费，所以这里写错或写漏，下游就跟着错。
 
 > 共享路径和命名约定看 `.codestable/reference/shared-conventions.md`。本阶段一般 feature 目录已经由 brainstorm 创建好了；没有的话在这一步建。
-> 报告语言：design / plan 正文默认用**中文**（见 `.codestable/attention.md` 报告语言节）；frontmatter / yaml 字段不翻译。
+> 报告语言：design / plan 正文必须按 `.codestable/attention.md` 用**中文**；若草稿用了英文，落盘前先改写为中文。frontmatter / yaml 字段不翻译。
 
 本阶段有三个入口：
 
@@ -179,7 +179,7 @@ AI 默认翻车的姿势是**不思考就往眼前最顺手的文件里加**。
 
 按 reference.md 模板补齐剩余节（第 0 / 3 / 4 节）。初稿 frontmatter `status: draft`。
 
-整稿成型后先落盘 draft design，并从 `{slug}-design.md` 抽出 candidate `{slug}-checklist.yaml`。checklist 的 steps/checks 初始都保持 `pending`，用 `validate-yaml.py` 校验。不要等用户确认后才生成 checklist，因为人审前的 `cs-feat-design-review` 需要同时审 design 和 checklist 是否对齐。
+整稿成型后先确认正文语言符合 `.codestable/attention.md`（默认中文；英文草稿先改写），再落盘 draft design，并从 `{slug}-design.md` 抽出 candidate `{slug}-checklist.yaml`。checklist 的 steps/checks 初始都保持 `pending`，用 `validate-yaml.py` 校验。不要等用户确认后才生成 checklist，因为人审前的 `cs-feat-design-review` 需要同时审 design 和 checklist 是否对齐。
 
 第 3 节"验收契约"提示：每条写成"输入 / 触发 → 期望可观察结果"，覆盖正常 + 边界 + 错误，并补 `Acceptance Coverage Matrix` 和 `DoD Contract`；完整模板看 reference.md。
 
@@ -241,6 +241,7 @@ AI 默认翻车的姿势是**不思考就往眼前最顺手的文件里加**。
 用户整体 review 通过，并且：
 
 - [ ] frontmatter 完整（`doc_type` / `feature` / `status=approved` / `summary` / `tags`），requirement 字段已对齐
+- [ ] design 正文已按 `.codestable/attention.md` 的报告语言落盘（默认中文；frontmatter / yaml 字段保持机读格式）
 - [ ] 第 1 节含"不做什么"和复杂度档位偏离（或明确走默认）
 - [ ] 第 2.1 / 2.2 用"现状 → 变化"两段式；接口有示例 + 来源位置；编排层开头有主流程图
 - [ ] 第 2.3 挂载点按"删了它 feature 是否消失"判据收紧（一般 3-5 条）

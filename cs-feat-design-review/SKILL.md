@@ -14,7 +14,7 @@ description: Feature design review gate。触发：人审前审 design/checklist
 目标不是替用户做产品判断，而是确认这份 design 已经具备让用户有效 review 和让下游稳定执行的条件：需求边界可核对、名词层和编排层有代码事实支撑、steps 可独立验证、checks 能回到 design 证据、风险 / 基线 / 交付物 / 清洁度可被后续 implement、code review、QA 和 acceptance 消费。
 
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md`。feature design 的具体结构以目标 `{slug}-design.md` / `{slug}-checklist.yaml` 和项目内共享口径为准。
-> 报告语言：plan review / design-review 报告正文默认用**中文**（见 `.codestable/attention.md` 报告语言节）；frontmatter / yaml 字段不翻译。
+> 报告语言：design-review 报告正文必须按 `.codestable/attention.md` 用**中文**；若草稿用了英文，落盘前先改写为中文。frontmatter / yaml 字段不翻译。
 
 ---
 
@@ -50,17 +50,17 @@ description: Feature design review gate。触发：人审前审 design/checklist
 
 ---
 
-## 独立 Task agent reviewer 增强项
+## 独立 Task agent reviewer gate
 
-本阶段默认由当前 agent 做本地方案审查；独立 Task agent reviewer 是增强项，不是硬依赖。检测不到 Task agent 能力、provider 未配置或用户明确要求快速完成时，可以继续本地 review，并在报告里记录 `Independent reviewer: local-only` / `skipped-by-user`；若需要用户授权降级，先按 `.codestable/reference/approval-conventions.md` 写 `approval-report.md`，再让用户选择。
+本阶段必须优先启动独立 Task agent reviewer；当前 agent 的本地审查只能作为合并与事实核验，不能替代独立审查。只有运行时确实没有 Task agent 能力、provider 不可用且无法配置，或用户在看到降级风险后明确授权，才允许 `local-only` / `skipped-by-user`。批量 design、赶时间、主 agent 自认为风险低，都不是降级理由；需要授权降级时，先按 `.codestable/reference/approval-conventions.md` 写 `approval-report.md`，再让用户选择。
 
-但一旦本轮已经启动独立 Task agent reviewer，它就是本轮 review gate 的输入。主 agent 可以先做本地审查草稿，但不能在 reviewer 返回前定稿 `{slug}-design-review.md`、不能给出 `passed`、不能把 design 交给用户确认。reviewer 卡住、失败、权限阻塞或耗时过长时，只能把本轮标成 `blocked` / `independent-review-pending`，让用户决定继续等待、重试 reviewer，或明确降级为 local-only review。
+一旦本轮应该启动或已经启动独立 Task agent reviewer，它就是本轮 review gate 的输入。主 agent 可以先做本地审查草稿，但不能在 reviewer 返回前定稿 `{slug}-design-review.md`、不能给出 `passed`、不能把 design 交给用户确认。reviewer 卡住、失败、权限阻塞或耗时过长时，只能把本轮标成 `blocked` / `independent-review-pending`，让用户决定继续等待、重试 reviewer，或明确降级为 local-only review。
 
 **检测由主 agent 在运行时自检自己的工具**，不靠脚本猜环境——主 agent 最清楚自己手上有哪些工具。按 Task agent 选择规则启动独立 Task agent reviewer（优先 Paseo subagent，否则当前宿主原生 Codex/Claude Task/Agent）：
 
-1. **有 `mcp__paseo__create_agent` 工具**：优先用 Paseo subagent 做只读独立审查（**首选**：能换 provider，做到真正异构审查）。启动前先加载 / 读取 `paseo` skill 的当前说明，并遵守它的规则：读取 `~/.paseo/orchestration-preferences.json`，使用 `providers.audit`，不要硬编码 Claude 或 Codex。不要无限轮询运行中的 agent；如果 reviewer 已启动但结果未返回，停止在 review gate，记录 pending/blocked，等待通知或用户决定。
+1. **有 `mcp__paseo__create_agent` 工具**：必须优先用 Paseo subagent 做只读独立审查（首选：能换 provider，做到真正异构审查）。启动前先加载 / 读取 `paseo` skill 的当前说明，并遵守它的规则：读取 `~/.paseo/orchestration-preferences.json`，使用 `providers.audit`，不要硬编码 Claude 或 Codex。不要无限轮询运行中的 agent；如果 reviewer 已启动但结果未返回，停止在 review gate，记录 pending/blocked，等待通知或用户决定。
 2. **否则有当前宿主原生 Codex/Claude Task/Agent 工具**：用原生 Task agent 做独立上下文审查。如属同类 agent，在报告里记录降级和残余风险。
-3. **两者都没有**：本地 review，记录 `local-only`，并在需要授权降级时写 `approval-report.md`；不要伪装启动。
+3. **两者都没有**：本地 review 只能在记录 `local-only` 且获得必要授权后定稿；没有授权时报告 `blocked`，不要伪装启动。
 
 独立 Task agent reviewer prompt 必须只给原始材料和边界，不透露本地 review 结论：
 
@@ -100,7 +100,7 @@ description: Feature design review gate。触发：人审前审 design/checklist
 ### 2. 独立审查合并
 
 - 记录主 agent 自检结果：`paseo` / `native-agent` / `local-only`。
-- 没有启动独立 Task agent reviewer 时，记录原因，本地 review 可以定稿。
+- 没有启动独立 Task agent reviewer 时，记录确无能力 / provider 不可用 / 用户授权降级；未满足这些条件时不得定稿 `passed`。
 - 启动 Paseo subagent / 原生 Task agent 后，最终 verdict 必须等 reviewer 返回。
 - reviewer 返回后逐条做本地事实核验；能用 design / checklist / 文档 / 代码证据支撑才合并。
 - reviewer 失败、权限阻塞、超时或仍在运行时，不要默默降级；报告 `status: blocked`。
@@ -263,7 +263,7 @@ Summary: E={n}, C={n}, H={n}, H-only core checks={列表或 none}。
 - [ ] 已读取 attention、design、checklist、相关 intent / brainstorm / roadmap / req / arch / compound。
 - [ ] 已按 design 声明核验必要代码、接口、类型、组件或命令事实。
 - [ ] 已确认 checklist 可解析，steps/checks 都可追溯。
-- [ ] 已运行独立 Task agent reviewer 检测，或记录为什么跳过。
+- [ ] 已按 Task agent 选择规则启动独立 reviewer；若未启动，已记录确无能力 / provider 不可用 / 用户授权降级。
 - [ ] 如果启动了独立 Task agent reviewer，已等到 completed 并逐条本地核验合并 / 驳回 findings；否则报告 `status: blocked`，没有进入用户 review。
 - [ ] 已审查需求边界、术语、名词层、编排层、挂载点、结构健康度、验收契约、steps/checks、基线、交付物、清洁度。
 - [ ] 已检查 Acceptance Coverage Matrix、Feature Design Review Invariants 和 Evidence Confidence Ledger。
@@ -281,6 +281,7 @@ Summary: E={n}, C={n}, H={n}, H-only core checks={列表或 none}。
 - roadmap 起头时不检查接口契约，导致 feature 偷偷绕开 roadmap。
 - 现状段没读代码就放过，implement 阶段才发现设计站不住。
 - steps 出现"和 / 以及 / 同时"却不复查是否该拆。
+- 把批量 design 或赶时间当成 local-only 降级理由。
 - 启动独立 Task agent reviewer 后结果还没回来，就把本地 review 定稿为 passed。
 - 外部 reviewer 的结论没经本地事实核验就照抄。
 - review 报告没有落盘，导致用户 review 和后续实现没有可追溯输入。

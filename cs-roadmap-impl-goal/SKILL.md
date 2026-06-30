@@ -83,9 +83,9 @@ description: Roadmap goal 编排。触发：完整推进大需求、执行整个
 对 roadmap items 里的每个 planned 子 feature，按依赖顺序逐个完成 `cs-feat-design` 的候选设计阶段：
 
 - 创建 feature 目录。
-- 写 `{feature-slug}-design.md`，frontmatter 带 `roadmap` / `roadmap_item`。
+- 写 `{feature-slug}-design.md`，frontmatter 带 `roadmap` / `roadmap_item`，正文按 `.codestable/attention.md` 的报告语言落盘（默认中文）。
 - 写 `{feature-slug}-checklist.yaml`。
-- 运行 `cs-feat-design-review`；有 blocking / blocked 时先修订或等待 reviewer，不进入用户二次确认。
+- 运行 `cs-feat-design-review`；Task agent 可用时每份 design-review 都必须有独立 reviewer 结果。批量生成多个 feature 不是 local-only 降级理由；有 blocking / blocked / pending 时先修订、等待 reviewer 或让用户明确授权降级，不进入用户二次确认。
 - 按现有 `cs-feat-design` 约定，把 items.yaml 对应条目更新为 `in-progress` 并填写 `feature` 字段。
 - design 必须包含：基线预检、必跑验证命令、交付物、验收场景证据类型、清洁度规则、可独立验证 steps。
 
@@ -181,7 +181,7 @@ features:
 1. roadmap items 是否 DAG，无循环依赖。
 2. 每个 item 是否已有 design + checklist。
 3. roadmap review 是否存在且 `status: passed`，没有 unresolved blocking finding。
-4. 每个 item 是否已有 design-review 且 `status: passed`，没有 unresolved blocking finding。
+4. 每个 item 是否已有 design-review 且 `status: passed`，没有 unresolved blocking finding，并记录已完成独立 reviewer 或用户明确降级。
 5. 每份 design 是否已 `status: approved`，且 frontmatter 的 `roadmap` / `roadmap_item` 与 items.yaml 一致。
 6. 每个 checklist step 是否可独立验证，且初始 `steps.status` 为 `pending`、`checks.status` 为 `pending`。
 7. 每个 feature 是否有必跑命令 / 基线风险 / 交付物 / 清洁度规则。
