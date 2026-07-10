@@ -1,0 +1,17 @@
+{
+  "id": "rt-f08",
+  "answerType": "routing-decision",
+  "task": {
+    "kind": "routing",
+    "state": {
+      "designStatus": "Approved",
+      "designReviewStatus": "ReviewPassed",
+      "goalRunState": "GoalComplete",
+      "driver_kind": "paseo",
+      "driver_id": "run-123"
+    }
+  },
+  "expect": {
+    "result_type": "Completed"
+  }
+}

@@ -162,21 +162,23 @@ updated_at: "YYYY-MM-DD"
 
 ## 功能验收报告
 
-在 `status: complete` 前，按 `.codestable/reference/execution-conventions.md` 的
+在 `status: complete` 前，按 `.codestable/reference/agent-conventions.md` 的
 Task agent 选择规则启动 Task agent，做面向产品的功能验收。结果写入
 `functional-acceptance.md`。
 
 报告必须包含：
 
 - reviewer 和 Task agent role。
+- Task agent id / run id、关闭结果或关闭失败 warning。
 - 已检查的 acceptance criteria。
 - 测试之外的 functional evidence。
 - verdict：pass、fail 或 inconclusive。
 - residual risks 和 follow-up。
 - 引用本次验收的 final iteration。
 
-测试、lint 和 build 是验证证据，但完成必须有 Task agent 功能验收。若 Task agent 无法启动
-或未授权，写 `approval-report.md` 并 owner-stop，不要把 goal 标为 complete。
+测试、lint 和 build 是验证证据，但完成必须有 Task agent 功能验收。Task agent 结果消费后
+按生命周期关闭；若启动失败，先处理容量恢复重试，仍失败或未授权时写 `approval-report.md`
+并 owner-stop，不要把 goal 标为 complete。
 
 ## Owner Stop 记录
 

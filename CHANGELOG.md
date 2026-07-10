@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.2
+
+- Hardened runtime upgrades: versionless or mismatched manifests now require synchronization, while `/cs-onboard --mode refresh-runtime` refreshes package-owned assets without overwriting dirty managed paths.
+- Updated the root `cs` router so action requests dispatch to the target skill in the current run, while advice and overview requests remain non-executing.
+- Synchronized Codex and Claude marketplace versions and documented complete-plugin plus per-repository upgrade steps.
+
+## 1.0.1
+
+- CodeStable skill simplification release.
+
+## 1.0.0
+
+- Simplified CodeStable skill entrypoints around main workflow skills and compatibility wrappers.
+- Added `cs-feat`, `cs-epic`, and `cs-docs` main entries with explicit `--stage` / `--mode` argument semantics.
+- Added long-running goal driver semantics for feature and epic flows, including `/goal` fallback instructions.
+- Added workflow scenario coverage and Paseo-agent verification evidence for changed skill workflows.
+- Documented partial status for earlier state-machine and manual dogfood reports.
+
 ## 0.1.0
 
 - Added the committed CodeStable plugin distribution structure under `plugins/codestable/`.

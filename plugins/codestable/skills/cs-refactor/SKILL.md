@@ -1,250 +1,221 @@
 ---
 name: cs-refactor
-description: 受控重构入口。触发：优化/重构/拆分/性能/代码太长，且不改变行为、不新增需求。
+description: "Refactor 主入口。触发：优化/重构/拆分/性能/代码太长，且不改变行为、不新增需求。不要用于新增功能(cs-feat)、修复 bug(cs-issue)、对外文档(cs-docs)、大需求拆解(cs-epic)。"
+argument-hint: "[--stage scan|design|apply] [--mode standard|fastforward] <target>"
+contracts:
+  - grep: "restoreRefactorStage"
+  - grep: "progressive reference loading"
+  - grep: "行为等价"
+  - not-grep: "git push"
+  - not-grep: "read all references"
 ---
 
 # cs-refactor
 
 ## 启动必读
 
-开始任何判断或动作前，先执行 CodeStable preflight：读 `.codestable/attention.md`；缺失先 `cs-onboard`；不读外部 AI 入口替代（详见 `.codestable/reference/execution-conventions.md`）。
+动作前先跑 CodeStable preflight：读 `.codestable/attention.md`（缺失先 `cs-onboard`）；不要用 `AGENTS.md`/`CLAUDE.md` 等外部入口代替它；细则见 `.codestable/reference/execution-conventions.md`。
 
-AI 自己重构有两个稳定失败模式：一是不知道模块真实需求和约束，改出来的东西功能不等价；二是一次吞掉的范围超过上下文承载，改到后面忘了前面的约束。这流程在"想优化"和"动手改"之间塞了扫描清单 + 方法库，让 AI 只接自己能稳定做对的活。
+`cs-refactor` 是重构的唯一推荐入口。它统一判定标准模式和 fastforward 模式，核心底线是行为等价：一旦会改变外部可观察行为，就转 `cs-feat` 或 `cs-issue`。
 
-```
-scan（扫优化点清单）→ design（和用户定做哪几条 + 顺序）→ apply（逐条执行，每步人工放行）
-```
-
-**核心纪律**：行为等价是底线。一旦会改外部可观察行为 → 不走 refactor，走 feature（需求变）或 issue（bug 修）。
-
-**架构 deepening 模式**：用户说"架构优化 / 模块太浅 / seam 不对 / 可测试性差 / AI 难导航"时，仍走本技能三阶段，不生成 HTML。scan 用 `codebase-design` 词汇找 deepening opportunities；这是内嵌词汇引用，不切换到独立 `codebase-design` skill。候选项写进标准 `{slug}-scan.md`，用户勾选后再进 design/checklist/apply。
-
-## 执行 gate（worktree + commit）
-
-进入 apply 前运行 start gate，`{slug}` 为 refactor 目录名：
-
-```bash
-python3 .codestable/tools/codestable-worktree-gate.py --root . --json start --unit .codestable/refactors/YYYY-MM-DD-{slug}
-```
-
-gate 不通过不开始改代码；override 时先在 unit 目录写 `worktree-override.md`（reason / scope / approval）。apply 完成、收尾 commit 前运行 commit gate（同命令 `commit`）；不通过先处理 findings。gate 安装与 branch-guard hook 见 `.codestable/reference/branch-guard-hooks.md`。
+`cs-refactor-ff` 长期保留为兼容入口，只传入 `requested_mode: fastforward`。
 
 ---
 
-## Fastforward 模式（小重构）
+## 入口意图
 
-单函数 / 单组件 / 1-3 处优化 / 有测试可自证 / 不需要目视——走完整三阶段太重。触发 `cs-refactor-ff`：直接识别、一次对齐、原地改、跑测试自证，不产 scan / design / checklist。
+本次调用参数：$ARGUMENTS
 
-触发："小重构"、"快速重构"、"简单优化下 XX 函数"、"直接改"、"别那么多步骤"。
+意图来源按优先级：调用参数 flag > 兼容入口预设 > 用户话术。参数为空或未被替换（仍是字面 `$ARGUMENTS`）时跳过该来源；调用参数用 `--stage <stage>` 表示阶段意图，用 `--mode <mode>` 表示执行模式，其余文本作为重构目标。
 
-**别走** ff：改动跨 > 1 文件 / 预计动点 > 3 处 / 需要目视验证 / 改公开接口（要 Parallel Change）/ 没有测试覆盖 / 跨模块。遇到劝用户走标准流程。ff 开干后发现变复杂切回完整流程从 scan 开始。
+| 参数 | 入口意图 |
+|---|---|
+| `--stage scan` | `requested_stage: scan` |
+| `--stage design` | `requested_stage: design` |
+| `--stage apply` | `requested_stage: apply` |
+| `--mode standard` | `requested_mode: standard` |
+| `--mode fastforward` | `requested_mode: fastforward` |
+
+旧裸 token（如 `ff`、`scan`）只作为历史提示词兼容识别；新文档和新调用一律用 `--stage` / `--mode`。
+
+无参数默认行为：没有 flag / 目标描述时，先按 `.codestable/refactors/`、scan/design/checklist/apply-notes 和当前 git diff 恢复；若没有可恢复重构且用户原话也没有目标，先问用户要优化哪个范围。
+
+入口意图只是偏好。仓库事实优先：已有 scan/design/checklist/apply-notes 时按真实状态续跑。
+
+---
+
+## Spec
+
+```haskell
+csRefactor :: RefactorRequest -> RefactorOutcome
+
+data RefactorRequest = RefactorRequest
+  { requestedStage : Maybe Stage         -- scan | design | apply
+  , requestedMode  : Maybe Mode          -- standard | fastforward
+  , userGoal       : Maybe Text
+  , repoFacts      : RepoFacts           -- 优先于 args / 聊天历史
+  }
+
+data Stage = Scan | Design | Apply | CodeReview
+data Mode  = Standard | Fastforward
+
+data RefactorState = RefactorState       -- 全部从 .codestable/refactors/{slug}/ 恢复
+  { refactorDir    : Maybe Path
+  , hasScan        : Bool
+  , scanSelected   : Bool                -- 用户已勾选 ✓/✗
+  , hasDesign      : Bool
+  , designStatus   : Draft | Approved    -- {slug}-refactor-design.md 的 status
+  , hasChecklist   : Bool                -- {slug}-checklist.yaml
+  , pendingHuman   : Bool                -- checklist 里 HUMAN 验证项未放行
+  , applyDone      : Bool                -- apply-notes 每步验证齐
+  , reviewStatus   : Missing | Passed | Blocking
+  }
+
+data RefactorOutcome
+  = RoutedTo Stage
+  | HumanCheckpoint CheckpointReason
+  | Completed RefactorSummary
+  | NeedsHuman Reason
+
+data CheckpointReason
+  = ScanSelection            -- scan 产物待用户勾选
+  | DesignConfirmation       -- design 整体待用户 review 放行
+  | HumanValidation          -- apply 中 HUMAN 验证项待用户确认
+```
+
+`restoreRefactorStage` 从仓库事实选下一步（一旦会改外部可观察行为 → 转 `cs-feat` 新需求或 `cs-issue` 修 bug，行为等价是底线）：
+
+```haskell
+restoreRefactorStage :: RefactorState -> EntryIntent -> RefactorOutcome
+restoreRefactorStage(s, intent)
+  | changesBehavior(intent)                          -> NeedsHuman "not behavior-preserving"
+  | intent.mode == Fastforward && smallSafe(s)       -> RoutedTo Apply       -- ff：识别+对齐+原地改+测试自证
+  | not s.hasScan                                     -> RoutedTo Scan
+  | s.hasScan && not s.scanSelected                  -> HumanCheckpoint ScanSelection
+  | s.scanSelected && not s.hasDesign                -> RoutedTo Design
+  | s.hasDesign && s.designStatus == Draft           -> HumanCheckpoint DesignConfirmation
+  | s.designStatus == Approved && s.pendingHuman     -> HumanCheckpoint HumanValidation
+  | s.designStatus == Approved && not s.applyDone    -> RoutedTo Apply
+  | s.applyDone && s.reviewStatus == Missing         -> RoutedTo CodeReview
+  | s.reviewStatus == Blocking                       -> RoutedTo Apply        -- 窄修复，修完重跑 review
+  | s.reviewStatus == Passed                         -> Completed summary
+```
+
+## Workflow
+
+主执行主线（每次调用按序走；各 stage "怎么做" 的厚规则见对应 protocol，本节只定顺序与边界）：
+
+```haskell
+workflow :: RefactorRequest -> RefactorOutcome
+workflow = preflight >=> parseEntryIntent >=> restoreRefactorStage
+       >=> loadStageProtocol >=> executeOrRoute >=> exitRecoverable
+
+preflight            -- 读 .codestable/attention.md；缺失 -> route to cs-onboard；不得用 AGENTS.md/CLAUDE.md 代替
+parseEntryIntent     -- flag > compat-preset > utterance；repoFacts override requestedStage/requestedMode；空参不推断 stage
+restoreRefactorStage -- 扫 .codestable/refactors/ + scan/design/checklist/apply-notes + git diff 恢复 RefactorState，
+                     -- 选 next stage（见 Spec）；会改外部可观察行为 -> route to cs-feat 或 cs-issue
+loadStageProtocol    -- 「Reference 加载」映射（见下节）；进 stage 才加载该 stage 所需文件
+executeOrRoute       -- scan 落盘清单待勾选；design 起草+抽 checklist 待整体放行；
+                     -- apply 逐条改+验证+记 apply-notes；遇 HumanCheckpoint 必停
+exitRecoverable      -- apply-notes 每步验证齐、design status: approved、next stage 或 checkpoint reason 明确；
+                     -- 不夹带 feature / issue 改动
+```
 
 ---
 
 ## 文件放哪儿
 
-```
+```text
 .codestable/refactors/{YYYY-MM-DD}-{slug}/
-├── {slug}-scan.md              ← 阶段 1 优化点清单
-├── {slug}-refactor-design.md   ← 阶段 2 执行方案
-├── {slug}-checklist.yaml       ← 阶段 2 生成，阶段 3 推进
-└── {slug}-apply-notes.md       ← 阶段 3 执行记录
+├── {slug}-scan.md
+├── {slug}-refactor-design.md
+├── {slug}-checklist.yaml
+└── {slug}-apply-notes.md
 ```
 
-目录命名同 feature / issue。slug 短到一眼看出改的是什么（`user-form-split`、`export-perf`）。
-
-为什么单独开目录不混进 features：refactor 产物是"代码当前状态扫描 + 执行记录"时效性强；feature 产物是"为什么这样设计"时效性弱。归档逻辑不一样。
+fastforward 默认不建目录；用户要求留记录时才写 `{slug}-refactor-note.md`。
 
 ---
 
-## 三个阶段
+## 模式选择
 
-| 阶段 | 产出 | 谁主导 |
-|---|---|---|
-| 1 scan | scan.md | AI 扫 + 前置检查，用户勾选 |
-| 2 design | refactor-design.md + checklist.yaml | AI 起草，用户整体 review |
-| 3 apply | 代码改动 + apply-notes.md | AI 执行，每步人工放行 |
+启动后先确认用户诉求是否真是行为不变的重构，再检查范围和测试自证能力。
 
-阶段间有 checkpoint：scan 不勾选不进 design；design 不放行不动代码；apply 里 HUMAN 验证项不点头不推进下一步。
+标准模式读取 `references/standard/protocol.md`，流程是：
 
----
+```text
+scan → 用户勾选 → design → 用户确认 → apply → cs-code-review
+```
 
-## 阶段 1：scan
+fastforward 模式读取 `references/fastforward/protocol.md`。必须同时满足：
 
-### 先跑前置检查（7 条），命中就停
+1. 行为真的不变，没有“顺便支持 X / 改成 Y”。
+2. 范围小：单函数/单组件/少量动点，不跨模块。
+3. 有测试、类型检查或等价证据能自证。
 
-动笔扫之前先跑一遍。命中任何一条 → **中止 scan，给路由建议**，不要硬凑。7 条检查和输出格式见 `reference/refusal-routing.md`。
-
-零条合法输出——扫完真的没发现值得做的就老实说不要凑。
-
-### 扫描范围锁定
-
-进 scan 前确认：**这次扫哪些文件**。默认：
-
-- 用户点名了具体文件 / 组件 → 就扫那些
-- "这个页面" → 入口组件 + 直接 import 的内部模块，不追公共依赖
-- "这个模块" → 模块目录下的文件，不追出模块边界
-- 范围 > 15 文件或 > 3000 行 → 触发第 6 条前置检查请用户先缩范围
-
-范围里要包含测试文件（用来判断第 2 条前置检查的测试覆盖）。
-
-### 扫的时候看什么
-
-按方法库四层当模板找：
-
-- **L1 行为等价迁移**：函数被很多处调用但接口/实现要改 → Parallel Change；整块老逻辑要被新实现替换 → Strangler Fig
-- **L2 代码级重构**：超长函数（> 50 行 / 圈复杂度 > 10）、重复条件片段、神秘临时变量、多层嵌套 if-else
-- **L3 结构拆分**：组件 > 300 行 / 文件承担多件事 / 容器与展示混在一起 / 相同逻辑多组件各写一份（前端）；Controller 直接调 DB / Service 缺失 / Repository 被绕开（后端）
-- **L4 性能**：重复计算（可 memo）/ N+1 查询 / 列表无虚拟化或分页 / 事件监听无清理 / 大对象深响应（Vue）
-- **Architecture deepening**：shallow module、pass-through wrapper、seam 泄漏、假 adapter、测试越过 interface、locality 缺失。候选项分类写"架构"，字段按 `reference/scan-checklist-format.md` 的架构扩展。
-
-完整方法库在 `reference/methods.md`、`reference/methods-l4.md` 和 `reference/methods-architecture.md`，扫描时全量加载作匹配表。
-
-### 产出格式
-
-`{slug}-scan.md` 两部分：
-
-1. **顶部总览**（一段）：扫描范围 / 发现条数 / 按分类分布 / 按风险分布 / 建议先做哪几条 / 慎做哪几条
-2. **清单条目**（一条一块）：字段顺序和硬约束见 `reference/scan-checklist-format.md`
-
-整份交给用户，**用户勾选 ✓ / ✗**（✗ 写理由）后进阶段 2。**不要替用户勾选**。
+任何一条不满足，回标准模式；不能因为用户说“快点”就跳过安全边界。
 
 ---
 
-## 阶段 2：design
+## Reference 加载
 
-### 输入
+```haskell
+modeProtocol :: Mode -> Protocol
+modeProtocol Standard    = "references/standard/protocol.md"
+modeProtocol Fastforward = "references/fastforward/protocol.md"
 
-- 用户勾选过的 `{slug}-scan.md`
-- 方法库（每条勾选项必须映射到方法号 M-Ln-NN，含 architecture deepening 方法）
+stageSupport :: Stage -> [Support]
+stageSupport Scan       = [ "references/library/methods.md"                 -- 方法库，scan 时才全量加载
+                          , "references/library/methods-l4.md"
+                          , "references/library/methods-architecture.md"
+                          , "references/library/scan-checklist-format.md"   -- scan 格式
+                          , "references/library/refusal-routing.md" ]       -- 拒绝路由
+stageSupport CodeReview = [ skill "cs-code-review" ]                        -- 公开横切技能
+stageSupport _          = []
 
-### 做的事
-
-1. **排顺序**——勾选条目有依赖的排前（L1 的 Parallel Change 通常先跑，L2 的提取跟在后面）。独立的按"低风险 + AI 可自证"优先，HUMAN 验证项排后批量处理
-2. **每条补执行细节**：方法号 / 步骤 / 前置条件 / 退出信号 / 验证责任方（AI / HUMAN）/ 回滚策略
-3. **识别前置依赖**——测试覆盖不够的条目前置"补刻画测试"；改公开接口的前置"搜调用方"
-4. **整体 review**：整稿交用户，放行后 `status: approved`
-5. **抽 checklist**：steps 对应执行顺序，checks 对应每步退出信号
-
-### design 文件结构
-
-```markdown
----
-doc_type: refactor-design
-refactor: {YYYY-MM-DD}-{slug}
-status: draft | approved
-scope: {扫描范围一句话}
-summary: {本次要做的几条是什么，一句话}
----
-
-# {slug} refactor design
-
-## 1. 本次范围
-- 从 scan 勾选了哪几条（编号）
-- 明确不做的（被 ✗ 的）和理由
-- 预估总工作量 / 总风险档位
-
-## 2. 前置依赖
-- 测试覆盖补齐（如需）
-- 调用方搜索（如需）
-- 其他一次性准备
-
-## 3. 执行顺序
-按步骤列，每步一块：
-- 步骤 N：{一句话动作}
-- 引用方法：M-Ln-NN {方法名}
-- 具体操作：{照方法库步骤落到本项目具体文件 / 函数}
-- 退出信号：{AI 跑什么测试 / HUMAN 看什么页面}
-- 验证责任：AI 自证 ｜ HUMAN
-- 回滚：{出问题怎么还原，通常 git revert 某步}
-
-## 4. 风险与看点
-- 高风险步骤汇总
-- 容易出错的点（跨步骤数据流变化等）
+-- 惰性加载（progressive reference loading）：按阶段加载，进 stage 才读该 stage 所需文件，不在启动时读全部
 ```
 
 ---
 
-## 阶段 3：apply
+## 人工 checkpoint
 
-### 推进规则
+触发时机以 Spec 的 `restoreRefactorStage` 为唯一权威；本节只定义停下后的行为：
 
-1. **一步一做不批量**——严格按 checklist 顺序，当前步不完成不开下一步
-2. **每步完成走验证**：
-   - AI 自证：跑指定测试 / 类型检查 / lint / grep 无残留旧引用。通过了记 apply-notes 继续
-   - HUMAN 验证：**停下来**汇报"第 N 步已完成，请在 {具体页面 / 操作} 目视确认，确认后我继续"。用户不明确说"继续"就不推进
-3. **偏离当场记**——执行中发现方案没考虑的情况（如有个调用方在动态 import 里），**停下来汇报不发挥**。和用户对齐后追加到 apply-notes，必要时回阶段 2 改 design
-4. **行为等价自检**——每步结束额外问"这一步有没有可能改了外部可观察行为？" 有怀疑就退回当步
-
-### apply-notes 格式
-
-```markdown
----
-doc_type: refactor-apply-notes
-refactor: {YYYY-MM-DD}-{slug}
----
-
-# {slug} apply notes
-
-## 步骤 1: {动作}
-- 完成时间: {date}
-- 改动文件: {file list}
-- 验证结果: {测试输出 / HUMAN 确认语录}
-- 偏离: {无 / 具体描述}
-
-## 步骤 2: ...
+```haskell
+onCheckpoint :: CheckpointReason -> Action
+onCheckpoint ScanSelection      = 停等用户勾选 scan 产物       -- AI 不替用户勾选
+onCheckpoint DesignConfirmation = 停等用户整体 review design   -- 放行后才进入 apply
+onCheckpoint HumanValidation    = 停等用户明确继续             -- apply 中 HUMAN 验证项
 ```
 
-### 全部完成后
-
-- 完成后先进入 `cs-code-review` 做独立 diff 评审；Critical/Important 未清零不进 commit，scoped-commit 发起权归 `cs-code-review`
-- 跑全量测试 + 类型检查 + lint
-- 最后一次请用户整体目视确认（前端：打开主要页面点一圈）
-- 确认通过后收尾 commit，message 引用 refactor 目录
+apply 完成后进入 `cs-code-review`；Critical/Important 未清零不提交。
 
 ---
+
+## Failure Behavior
+
+```haskell
+needsHuman :: Situation -> Bool
+needsHuman s = attentionMissing s          -- .codestable/attention.md 缺失 -> 先 cs-onboard
+            || noRecoverableRefactor s     -- 无可恢复重构目标
+            || ambiguousScope s            -- 重构范围模糊
+            || stageConflictsRepoFacts s   -- requested stage 与仓库事实冲突
+            || changesBehavior s           -- 诉求其实会改外部可观察行为 -> cs-feat 或 cs-issue
+            || ffTurnedComplex s           -- fastforward 途中发现变复杂需切回标准模式
+```
+
+报告：当前产物（scan/design/checklist/apply-notes）、阻塞原因、下一步用户动作、已写文件、是否可安全重试。
 
 ## 退出条件
 
-- [ ] scan 前置检查跑过，命中的已路由，没命中的才进 scan
-- [ ] `{slug}-scan.md` 用户已勾选（✓/✗）
-- [ ] design 每条勾选项映射到方法号
-- [ ] design 用户整体 review 通过 `status: approved`
-- [ ] checklist.yaml 已生成且通过 `validate-yaml.py`
-- [ ] apply 每步都有验证记录（AI 自证贴日志，HUMAN 贴用户确认语录）
-- [ ] 全量测试 / 类型检查 / lint 通过
-- [ ] 用户最后一次目视确认通过
+```haskell
+mayExit :: State -> Bool
+mayExit s
+  | s.mode == Standard    = scanSelected s && designApproved s
+                         && applyNotesEachStepVerified s && testsPassed s && reviewPassed s
+  | s.mode == Fastforward = methodScopeEvidenceStated s   -- 已说明方法、范围、验证证据；
+                                                          -- 如变复杂已停下切回标准模式
+```
 
----
-
-## 容易踩的坑
-
-- **AI 硬凑清单**——前置检查明显命中却找理由绕过，扫出一堆"代码可以更优雅"无量化问题的条目
-- **夹带行为改动**——在重构中间"顺便修了 bug / 优化提示文案"——拆成独立 issue 或 feature
-- **跨步骤合并动作**——一次提交做 2-3 步，失去"单步回滚"能力
-- **把口味项列进清单**——命名偏好 / 引号 / 箭头函数 vs function——走 decisions
-- **扫大模块直接动手**——> 15 文件 / > 3000 行不拆就进 scan，产出没法决策的长清单
-- **HUMAN 验证项自己跳过**——前端效果 AI 看不到，不能用"类型检查过了"替代人工目视
-- **覆盖率不够硬上**——没测试的模块直接改，"行为等价"只是口头承诺
-
----
-
-## 与相邻工作流的边界
-
-- **feature**：加新能力 / 改需求。refactor 里冒出"顺便实现 X"停下拆出去
-- **issue**：修 bug / 行为错了。refactor 里发现的 bug 记成新 issue 不偷偷修
-- **decisions**：全项目长期约束（"以后都用 composable"、"禁用 mixin"）。refactor 可引用已有 decision 但不产出 decision
-- **architecture**：跨模块边界重划 / 分层调整。单次 refactor 不跨模块；跨模块要拆成"更新架构 + 记决策 + N 个模块级 refactor"
-- **tricks / learning**：refactor 中发现的手法 → tricks；踩的坑 → learning
-
----
-
-## 相关文档
-
-- `cs-refactor-ff/SKILL.md` — 小重构超轻量通道
-- `reference/scan-checklist-format.md` — scan 清单条目字段 / 顺序 / 硬约束
-- `reference/refusal-routing.md` — scan 前置检查 7 条 + 路由表
-- `reference/methods.md` — 方法库（L1-L3）
-- `reference/methods-l4.md` — 方法库（L4 性能与异步）
-- `reference/methods-architecture.md` — 方法库（architecture deepening）
-- `.codestable/reference/shared-conventions.md` — 跨工作流共享口径
+不夹带 feature 或 issue 改动。

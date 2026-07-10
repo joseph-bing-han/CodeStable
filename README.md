@@ -10,9 +10,11 @@
 
 厌倦了 OpenSpec 的草台、Oh-My-OpenAgent 的过度设计、Superpowers 的散装——我从 0 写了一套简单轻巧、围绕**人在环**的 AI Harness。
 
+严肃工程不止于"用 AI 写代码"，更在于**用工程方法约束 AI 本身**：skill 不靠感觉写、靠可复现实验证明与迭代——见 [技能怎么迭代：工程化的 build → evaluate 闭环](#技能怎么迭代工程化的-build--evaluate-闭环)。
+
 <p>
   <img src="https://img.shields.io/badge/status-beta-F59E0B?style=flat-square" alt="Status"/>
-  <img src="https://img.shields.io/badge/cs--skills-29-6366F1?style=flat-square" alt="CodeStable Skills"/>
+  <img src="https://img.shields.io/badge/cs--skills-32-6366F1?style=flat-square" alt="CodeStable Skills"/>
   <img src="https://img.shields.io/badge/license-MIT-10B981?style=flat-square" alt="License"/>
 </p>
 
@@ -78,7 +80,7 @@ Claude 更新后需要重启 Claude Code 才会应用新版插件。
 npx skills@latest update
 ```
 
-如果旧安装器没有记录来源，重新执行上面的 `npx skills@latest add liuzhengdongfortest/CodeStable` 安装命令即可。
+如果旧安装器没有记录来源，重新执行上面的 `npx skills@latest add liuzhengdongfortest/CodeStable` 安装命令即可。升级时应更新完整 CodeStable 插件，不要只替换根 `cs` skill；runtime 刷新还需要同版本的 `cs-onboard` 及其工具。全局插件升级后，建议在每个已接入项目中显式执行 `/cs-onboard --mode refresh-runtime`，立即刷新并核验 repo-local runtime。即使不手动执行，下一次 CodeStable preflight 也会比较 `.codestable/runtime-manifest.json` 与当前插件版本，在 manifest 缺失、版本不匹配或 runtime capability 缺失且受管路径干净时自动刷新；它不会在后台扫描所有仓库。遇到 `managed-paths-dirty`、未接入或骨架不完整时会停下提示，不会强制覆盖。
 
 只需要一键，开始工作：
 
@@ -92,7 +94,7 @@ npx skills@latest update
 /cs
 ```
 
-`cs` 会读你的诉求，告诉你这次该走哪个 `cs-xxx`。
+`cs` 会先判断你要执行、咨询还是了解体系：行动请求同轮直转，咨询请求只给建议；信息不足时只问一个聚焦问题。
 
 ---
 
@@ -151,285 +153,75 @@ CodeStable 顺着软件编码的真实流程来设计，把开发活动建模成
 | 实体 | 英文 | 干什么 |
 |------|------|--------|
 | **需求** | requirements | 原始用户故事 + 领域术语（CONTEXT.md）+ 架构决策（ADR）。最终的逃生通道——代码烂成一坨屎时，可以摒弃所有代码、让 AI 重新生成 |
-| **路线图** | roadmap | "我想要一个权限校验系统"——直接塞 feature AI 接不住，先拆成路线图分步推进；`cs-roadmap-review` 做独立规划审查，`cs-roadmap-impl-goal` 把大需求一路推到 `/goal` 指令 |
+| **Epic** | epic | “我想要一个权限校验系统”这类大需求的主入口；用户侧叫 epic，第一版内部仍复用 `.codestable/roadmap/` 和 roadmap doc_type |
 | **目标** | goals | 限定起点和终点，写起点报告后让 AI 自主迭代实现/验证，完成前用 subagent 做功能验收 |
-| **特性** | feature | 实际落地的工程执行过程，人与 AI 共同协作，对 design / 实现 / 验收负责；每个阶段之间有显式的 Gate 卡口（design-review / code-review / qa） |
+| **特性** | feature | 实际落地的工程执行过程，人与 AI 共同协作，对 design / 实现 / 验收负责；每个阶段之间有显式的 Gate 卡口 |
 | **问题** | issue | 开发完成后的 BUG 单子，AI 和人一同解决 |
 | **重构** | refactor | 代码腐化时的整理过程（beta） |
 | **知识** | compound | 复利工程的知识库，沉淀踩过的坑、好做法、调研结论（`cs-keep`）；碎片化项目约定写入 `attention.md`（`cs-note`） |
 
 ### 流程
 
-| 流程 | 关键技能链 | 说明 |
+| 流程 | 推荐主入口 | 说明 |
 |------|------------|------|
-| **特性引入** | `cs-feat` → `cs-feat-design` → `cs-feat-design-review` *(Gate)* → `cs-feat-impl` → `cs-code-review` *(Gate)* → `cs-feat-qa` *(Gate)* → `cs-feat-accept` | 想清楚 → 方案独立审查 → 逐步编码 → 代码审查 → QA → 验收闭环 |
-| **大需求端到端** | `cs-roadmap` → `cs-roadmap-review` *(Gate)* → 用户确认 → `cs-roadmap-impl-goal` → `/goal` 指令 | 大需求拆成路线图 → 独立规划审查 → 逐个 feature 自动推进至验收 |
+| **特性引入** | `cs-feat` | 一个入口端到端推进 design → design-review → 用户确认 → goal 包长程执行 implementation → `cs-code-review` → QA → acceptance |
+| **大需求端到端** | `cs-epic` | 大需求规划 → 规划审查 → 用户确认 → 子 feature design/review → goal 执行包 → 派发可见 goal driver（失败则输出 `/goal` 指令） |
 | **目标达成** | `cs-goal` | 限定起点/终点 → grill 写起点报告 → 自主实现/验证/迭代 → subagent 功能验收 |
-| **问题修改** | `cs-issue-report` → `cs-issue-analyze` → `cs-issue-fix` → `cs-code-review` *(Gate)* | 跟 AI 说哪里有问题 → 分析根因 → 定点修复 → 合并前独立评审 |
-| **代码重构** | `cs-refactor` (beta) → `cs-code-review` *(Gate)* | 软件架构腐化不是一蹴而就的。AI 辅助重构，但**终归是人在重构**——还在迭代中，欢迎赐教 |
+| **问题修改** | `cs-issue` | 一个入口端到端推进 report → analyze → fix → `cs-code-review` |
+| **代码重构** | `cs-refactor` | 行为等价重构；内部判定标准模式或 fastforward mode，完成后进入 `cs-code-review` |
+| **对外文档** | `cs-docs` | 写或更新开发者指南、用户指南、API 参考；知识库卫生仍由 `cs-docs-neat` 负责 |
 
 `cs-code-review` 是各执行流末端、commit 前的横切质量门禁。阶段或里程碑收尾时，用 `cs-docs-neat` 整理 `.codestable/`、README/docs、`CLAUDE.md` / `AGENTS.md` 和 agent 记忆，避免文档与代码脱节。
-
-> 强分支保护：`cs-onboard` 可选释放 `codestable-ai-branch-guard` hook，拦截 AI 在 `main`/`master` 上直接实现，强制走 worktree。详见 `cs-onboard` 的「分支保护 hook」。
-
 
 ---
 
 ## 技能总览
 
-<table>
-<tr><th>分组</th><th>技能</th><th>用途</th></tr>
-<tr><td><b>根入口</b></td><td><code>cs</code></td><td>统一入口——介绍体系全貌 + 把开放式诉求路由到正确的 cs-* 子技能。不知道用哪个时就喊它</td></tr>
-<tr><td><b>接入</b></td><td><code>cs-onboard</code></td><td>把 CodeStable 接入到一个新仓库 / 已有零散文档的仓库；释放 reference/、tools/ 和可选的分支保护 hook</td></tr>
-<tr><td rowspan="2"><b>需求 & 领域</b></td><td><code>cs-req</code></td><td>整理 / 沉淀能力愿景 doc</td></tr>
-<tr><td><code>cs-domain</code></td><td>维护 <code>requirements/CONTEXT.md</code> 术语表 + <code>requirements/adrs/</code> 架构决策（守门 3 判据 + Nygard 四节）+ 单/多 context 拓扑</td></tr>
-<tr><td rowspan="3"><b>路线图</b></td><td><code>cs-roadmap</code></td><td>承载一块大需求的事前规划：概设（模块拆分）+ 架构层详设（接口契约 / 共享协议）+ 子 feature 拆解清单</td></tr>
-<tr><td><code>cs-roadmap-review</code></td><td>roadmap 人审前的独立规划审查 Gate，支持 Paseo 多 agent 辅助审查，产出 <code>{slug}-roadmap-review.md</code></td></tr>
-<tr><td><code>cs-roadmap-impl-goal</code></td><td>大需求端到端编排：roadmap → review → 用户确认 → 逐 feature design/checklist/design-review → 输出可粘贴的 <code>/goal</code> 指令</td></tr>
-<tr><td><b>讨论入口</b></td><td><code>cs-brainstorm</code></td><td>想法模糊时的统一讨论入口，做分诊：直接 design / 进 feature 写 brainstorm.md / 移交 roadmap</td></tr>
-<tr><td><b>目标</b></td><td><code>cs-goal</code></td><td>限定起点/终点，写起点报告后让 AI 自主迭代实现/验证，完成前用 subagent 做功能验收</td></tr>
-<tr><td rowspan="8"><b>特性流程</b></td><td><code>cs-feat</code></td><td>新特性子流程入口，按已有产物自动路由到对应阶段</td></tr>
-<tr><td><code>cs-feat-design</code></td><td>起草 <code>{slug}-design.md</code> + <code>{slug}-checklist.yaml</code> 作为后续唯一输入</td></tr>
-<tr><td><code>cs-feat-design-review</code> ✦Gate</td><td>design 人审前的独立方案审查，支持 Paseo 多 agent，产出 <code>{slug}-design-review.md</code></td></tr>
-<tr><td><code>cs-feat-impl</code></td><td>按 checklist 推进写代码；也处理 review-fix 和 qa-fix 回流</td></tr>
-<tr><td><code>cs-code-review</code> ✦Gate</td><td>任何流程实现后、commit 前的横切只读代码审查，产出 <code>{slug}-review.md</code>；blocking 时回到 impl</td></tr>
-<tr><td><code>cs-feat-qa</code> ✦Gate</td><td>代码审查通过后的本地 QA 验证，产出 <code>{slug}-qa.md</code>；失败时回到 impl 的 qa-fix</td></tr>
-<tr><td><code>cs-feat-accept</code></td><td>对照 design 核实现 + review/QA 报告做验收闭环，回写 requirement / roadmap</td></tr>
-<tr><td><code>cs-feat-ff</code></td><td>超轻量通道：不写 design、不分阶段，让 AI 直接做</td></tr>
-<tr><td rowspan="4"><b>问题流程</b></td><td><code>cs-issue</code></td><td>问题修复子流程入口</td></tr>
-<tr><td><code>cs-issue-report</code></td><td>把脑子里的问题落成可复现、可追溯的 report</td></tr>
-<tr><td><code>cs-issue-analyze</code></td><td>找根因、评估修复风险、给方案</td></tr>
-<tr><td><code>cs-issue-fix</code></td><td>定点修复 + 验证 + 写 fix-note</td></tr>
-<tr><td rowspan="2"><b>重构流程</b></td><td><code>cs-refactor</code></td><td>(beta) 重构主流程：scan → design → apply，每步人工放行</td></tr>
-<tr><td><code>cs-refactor-ff</code></td><td>(beta) 轻量重构通道：识别 1-3 条低风险优化，一次确认，原地改</td></tr>
-<tr><td><b>审计</b></td><td><code>cs-audit</code></td><td>主动扫描代码：bug 隐患 / 安全漏洞 / 性能问题 / 架构偏离，产出批量发现清单</td></tr>
-<tr><td rowspan="2"><b>知识沉淀</b></td><td><code>cs-keep</code></td><td>坑点 / 技巧 / 决策 / 调研沉淀到 <code>compound/</code>，纯 markdown，grep 检索</td></tr>
-<tr><td><code>cs-note</code></td><td>碎片化项目约定（编译 flag / 路径陷阱 / 命令别名）追加到 <code>attention.md</code></td></tr>
-<tr><td><b>文档整理</b></td><td><code>cs-docs-neat</code></td><td>阶段/里程碑收尾时同步 <code>.codestable/</code>、README/docs、<code>CLAUDE.md</code> / <code>AGENTS.md</code> 和 agent 记忆，防止文档与代码脱节</td></tr>
-<tr><td rowspan="2"><b>对外文档</b></td><td><code>cs-doc-tutorial</code></td><td>对外的开发者指南 / 用户指南（任务导向，怎么用 X 做 Y）</td></tr>
-<tr><td><code>cs-doc-api</code></td><td>从源码反推的 API 参考（逐条目，给读者查零件）</td></tr>
-</table>
+### 推荐主入口
 
-完整技能目录见 [SKILL_CATALOG.md](./SKILL_CATALOG.md)。日常不知道用哪个时直接调用 `/cs`，它会按诉求路由到对应技能。
+| 分组 | 技能 | 用途 |
+|---|---|---|
+| 根入口 | `cs` | 行动请求同轮直转，咨询请求只给建议；介绍体系时不启动下游流程 |
+| 接入 | `cs-onboard` | 把 CodeStable 接入新仓库或已有零散文档仓库 |
+| 需求 & 领域 | `cs-req` / `cs-domain` | 沉淀能力愿景、领域术语、ADR 和 context 拓扑 |
+| Epic | `cs-epic` | 大需求端到端：规划、review、子 feature design、goal 包 |
+| 讨论入口 | `cs-brainstorm` | 想法模糊时分诊到 feature、epic 或 brainstorm note |
+| 目标 | `cs-goal` | 限定起点/终点后自主迭代到验收 |
+| 特性流程 | `cs-feat` | 新特性端到端：design、review、impl、code review、QA、accept |
+| 问题流程 | `cs-issue` | 问题修复端到端：report、analyze、fix、review |
+| 重构流程 | `cs-refactor` | 行为等价重构，含标准模式和 fastforward mode |
+| 横切审查 | `cs-code-review` | 实现完成后、commit 前的只读代码审查 gate |
+| 审计 | `cs-audit` | 主动扫描 bug、安全、性能、可维护性和架构偏离 |
+| 反馈 | `cs-feedback` | 收集 CodeStable skill 使用问题，自动采集本机历史并准备 GitHub issue |
+| 知识沉淀 | `cs-keep` / `cs-note` | 沉淀 compound 知识或短项目注意事项 |
+| 对外文档 | `cs-docs` | 写开发者指南、用户指南、API 参考 |
+| 文档收尾 | `cs-docs-neat` | 同步 `.codestable/`、README/docs、agent 入口和记忆 |
+
+### 长期兼容入口
+
+旧技能名继续可用，但只转入对应主入口，不维护独立规则：
+
+- Feature：`cs-feat-design` / `cs-feat-design-review` / `cs-feat-impl` / `cs-feat-qa` / `cs-feat-accept` / `cs-feat-ff`
+- Issue：`cs-issue-report` / `cs-issue-analyze` / `cs-issue-fix`
+- Refactor：`cs-refactor-ff`
+- Docs：`cs-doc-tutorial` / `cs-doc-api`
+- Epic：`cs-roadmap` / `cs-roadmap-review` / `cs-roadmap-impl-goal`
+
+完整技能目录见 [SKILL_CATALOG.md](./SKILL_CATALOG.md)。日常不知道用哪个时直接调用 `/cs`。
 
 ---
 
-## 工作流示意
+## 工作流与运行时
 
-CodeStable 的技能不是一条线性流水，而是**分层 + 事件驱动**的：根入口路由、onboard、长效档案、roadmap 规划、feature / issue / refactor 执行流，以及横切的知识沉淀。
+CodeStable 是分层、事件驱动的：`cs` 先判入口模式，行动请求同轮直转，咨询请求只给建议；`cs-feat` / `cs-issue` / `cs-refactor` 按仓库事实恢复阶段并经过 `cs-code-review`，其中 issue / refactor 在 review、blocking 或用户确认 checkpoint 停下；`cs-epic` 编排 planning、批量子 design 和 goal driver；旧阶段技能只保留为兼容入口。
 
-```text
-═══════════════════════════════════════════════════════════════════════
- 根入口 · 路由                              （任何时刻都可以调用）
-───────────────────────────────────────────────────────────────────────
-   cs ──▶ 介绍体系 / 把开放式诉求路由到下面任一具体子技能
-          （本身不做事，只做分诊和提示）
-═══════════════════════════════════════════════════════════════════════
-                              │
-              ┌───────────────┼───────────────┐
-              ▼               ▼               ▼
-        （未接入）        （已接入）      （想了解体系）
-         走阶段 0       直达 1~4 层 / 横切    给速读
-              │
-              ▼
-═══════════════════════════════════════════════════════════════════════
- 阶段 0 · 接入                                  （只在新项目跑一次）
-───────────────────────────────────────────────────────────────────────
-   cs-onboard ──▶ 生成 .codestable/ 骨架 + 释放 reference/、tools/
-                  可选：释放 codestable-ai-branch-guard hook（强制走 worktree）
-═══════════════════════════════════════════════════════════════════════
-                              │
-                              ▼
-═══════════════════════════════════════════════════════════════════════
- 第 1 层 · 长效档案（"系统现在长什么样"，只记现状）
-───────────────────────────────────────────────────────────────────────
-   cs-req     ──▶ .codestable/requirements/{slug}.md      能力愿景
-   cs-domain  ──▶ .codestable/requirements/CONTEXT.md     领域术语
-                  .codestable/requirements/adrs/NNN-*.md  架构决策（守门 3 判据）
-═══════════════════════════════════════════════════════════════════════
-                              │
-                              ▼
-═══════════════════════════════════════════════════════════════════════
- 第 2 层 · 规划（"接下来打算怎么做这块大需求"，大需求才需要）
-───────────────────────────────────────────────────────────────────────
-   cs-roadmap ──▶ .codestable/roadmap/{slug}/
-                    ① 概设       —— 拆成哪几个模块 / 组件
-                    ② 架构层详设 —— 接口契约 / 共享协议
-                    ③ 子 feature —— 多条可执行的 feature 清单
+`cs-onboard` 在项目根生成 `.codestable/`，集中保存 requirements、roadmap、goals、features、issues、refactors、audits、compound、gates 与共享 reference。Python 工具脚本从已安装的 `cs-onboard` skill 包运行，不再复制到每个 repo。
 
-   cs-roadmap-review ✦Gate ──▶ 独立规划审查 → {slug}-roadmap-review.md
-                                支持 Paseo 多 agent；不通过不能推进实现
+- `requirements/` 保存长期能力、术语和 ADR；`roadmap/` 保存待执行规划。
+- feature / issue / refactor 各自按工作项聚合产物；`compound/` 是统一知识沉淀目录。
+- 普通 skill 不读取 sibling skill 的深层 reference；共享规则由 `cs-onboard` 释放到 `.codestable/reference/`，兼容入口只转交主入口。
 
-   cs-roadmap-impl-goal ──▶ 为每个子 feature 完成 design/checklist/design-review
-                             → 输出可直接粘贴的 /goal 指令
-═══════════════════════════════════════════════════════════════════════
-                              │
-                              ▼
-═══════════════════════════════════════════════════════════════════════
- 讨论入口（可选 · 想法模糊时进入，做分诊后路由到下游）
-───────────────────────────────────────────────────────────────────────
-                          ┌── case 1 已经够清楚 ──▶ cs-feat-design
-   cs-brainstorm ────────▶┼── case 2 小需求方向定 ─▶ feature 流（落 brainstorm.md）
-                          └── case 3 大需求只有一个词 ─▶ cs-roadmap
-═══════════════════════════════════════════════════════════════════════
-                              │
-                              ▼
-═══════════════════════════════════════════════════════════════════════
- 第 3 层 · 执行流程（按事件类型选一条进入）
-───────────────────────────────────────────────────────────────────────
-
-  ▸ 事件：新增能力                                          ┌──────────────┐
-                                                           │  features/   │
-       cs-feat-design                                      │  YYYY-MM-DD- │
-           │                                               │  {slug}/     │
-           ▼                                               │              │
-       cs-feat-design-review ✦Gate ── 不通过回 design      │ -design.md   │
-           │ 通过                                          │ -checklist.  │
-           ▼                                               │  yaml        │
-       cs-feat-impl                                        │ -review.md   │
-           │                                               │ -qa.md       │
-           ▼                                               │ -acceptance  │
-       cs-code-review ✦Gate ────── blocking 回 impl        │  .md         │
-           │ 通过                                          └──────────────┘
-           ▼
-       cs-feat-qa ✦Gate ────────── 失败回 impl
-           │ 通过
-           ▼
-       cs-feat-accept
-
-       cs-feat-ff ──(轻量直通车，跳过 design/gate，直接 impl → review)──▶
-
-  ▸ 事件：修复缺陷                                          ┌──────────────┐
-       cs-issue-report ─▶ cs-issue-analyze ─▶ cs-issue-fix │  issues/     │
-                                              ─▶ cs-code-review ✦Gate      │
-                                                           └──────────────┘
-
-  ▸ 事件：代码腐化（beta）                                   ┌──────────────┐
-       cs-refactor / cs-refactor-ff ─▶ cs-code-review ✦Gate│  refactors/  │
-                                                           └──────────────┘
-
-  ▸ 事件：目标驱动                                          ┌──────────────┐
-       cs-goal ──▶ grill 起点报告 ─▶ 自主 impl/验证/迭代    │  goals/      │
-                   ─▶ subagent 功能验收                     └──────────────┘
-═══════════════════════════════════════════════════════════════════════
-                              │
-          ┌───────────────────┴───────────────────┐
-          ▼ 任意阶段觉得"这个值得记下来"都能触发    ▼ 阶段/里程碑结束触发
-═══════════════════════════════════════════════════════════════════════
- 横切层 · 知识沉淀 & 文档整理
-───────────────────────────────────────────────────────────────────────
-   cs-keep  ──▶ .codestable/compound/YYYY-MM-DD-{slug}.md
-                 纯 markdown，无 frontmatter，grep 检索
-                 下一次 cs-feat-design / cs-issue-analyze 会回头 grep 复用
-
-   cs-note  ──▶ .codestable/attention.md（碎片约定：flag / 路径 / 别名）
-
-   cs-docs-neat ──▶ 同步 .codestable/、README/docs、CLAUDE.md / AGENTS.md
-                     防止文档与代码脱节
-═══════════════════════════════════════════════════════════════════════
-```
-
-**怎么读这张图：**
-
-- **纵向是层次**，不是严格的时间顺序——长效档案层会反复被刷新，规划层只在大需求时进入。
-- **✦Gate 是显式阻断点**：design-review / code-review / qa 三道 Gate 各自产出报告，有 blocking 发现时流程不能向前，必须回到对应 impl 修复后重新过 Gate。
-- **第 3 层是事件入口**：来了新需求走 feature 流，发现 bug 走 issue 流，发现腐化走 refactor 流，目标驱动走 goal 流。
-- **横切层是飞轮**：任何流程跑完发现"这事值得记下来"都可以触发 `cs-keep` 沉淀，沉淀的产物又会被下一次同类工作读到；`cs-docs-neat` 在里程碑收尾时统一整理文档防止漂移。
-
-完整示意图另见 [WORKFLOW.md](./WORKFLOW.md)。
-
----
-
-## 运行时结构
-
-`/cs-onboard` 跑完后，会在你的项目根下生成 `.codestable/`，作为 requirements、roadmap、goals、features、issues、refactors、audits、compound、tools、hooks 和 reference 的聚合根。
-
-```text
-你的项目/
-├── .codestable/
-│   ├── attention.md                       # CodeStable 技能启动必读的项目注意事项
-│   ├── requirements/                      # 需求 + 领域模型（cs-req / cs-domain 共同维护）
-│   │   ├── VISION.md                      # 能力中心索引
-│   │   ├── {slug}.md                      # 一个能力一份，扁平不分组
-│   │   ├── CONTEXT.md                     # 领域术语表（cs-domain，lazy）
-│   │   ├── CONTEXT-MAP.md                 # 多 context 拓扑入口（仅多 context 项目）
-│   │   ├── adrs/                          # 架构决策记录（cs-domain，lazy）
-│   │   │   └── NNN-{slug}.md              # Nygard 四节 + 状态机
-│   │   └── {ctx}/                         # 子 context 子目录（仅多 context）
-│   │       ├── CONTEXT.md
-│   │       ├── adrs/
-│   │       └── {capability}.md
-│   │
-│   ├── roadmap/                           # 路线图（"接下来打算怎么走"）
-│   │   └── {slug}/
-│   │       ├── {slug}-roadmap.md          # 主文档：背景 / 拆解 / 排期
-│   │       ├── {slug}-items.yaml          # 机器可读子 feature 清单，acceptance 回写状态
-│   │       ├── {slug}-roadmap-review.md   # 人审前的规划审查报告
-│   │       └── drafts/                    # 可选：草稿 / 调研
-│   │
-│   ├── goals/                             # 目标驱动流程聚合根
-│   │   └── {slug}/
-│   │       ├── {slug}-start-report.md
-│   │       ├── {slug}-state.yaml
-│   │       ├── {slug}-iteration-*.md
-│   │       └── {slug}-functional-acceptance.md
-│   │
-│   ├── features/                          # 特性流程聚合根
-│   │   └── YYYY-MM-DD-{slug}/             # 一个 feature 一个目录
-│   │       ├── {slug}-brainstorm.md       # 可选（cs-brainstorm 产出）
-│   │       ├── {slug}-design.md           # 方案（cs-feat-design）
-│   │       ├── {slug}-checklist.yaml      # 推进清单（impl 跑、accept 回写）
-│   │       ├── {slug}-design-review.md    # 人审前方案审查
-│   │       ├── {slug}-review.md           # 实现后代码审查
-│   │       ├── {slug}-qa.md               # 代码审查后 QA gate
-│   │       └── {slug}-acceptance.md       # 验收报告（cs-feat-accept）
-│   │
-│   ├── issues/                            # 问题流程聚合根
-│   │   └── YYYY-MM-DD-{slug}/
-│   │       ├── {slug}-report.md           # 问题报告
-│   │       ├── {slug}-analysis.md         # 根因分析（不显然时才有）
-│   │       └── {slug}-fix-note.md         # 修复记录
-│   │
-│   ├── refactors/                         # 重构流程聚合根（beta）
-│   │   └── YYYY-MM-DD-{slug}/
-│   │       ├── {slug}-scan.md
-│   │       ├── {slug}-refactor-design.md
-│   │       ├── {slug}-checklist.yaml
-│   │       └── {slug}-apply-notes.md
-│   │
-│   ├── audits/                            # 审计发现与批量扫描产物
-│   ├── brainstorms/                       # 独立头脑风暴产物
-│   ├── compound/                          # 知识沉淀（复利工程）统一目录
-│   │   └── YYYY-MM-DD-{slug}.md
-│   │       # 纯 markdown，无 frontmatter，grep 检索（cs-keep 产出）
-│   │
-│   ├── gates/                             # workflow gate 配置（onboard 释放）
-│   ├── tools/                             # 跨工作流共享脚本（onboard 释放）
-│   └── reference/                         # 共享参考文档（onboard 释放）
-│       ├── shared-conventions.md          # 跨技能口径 / 路径命名 / 元数据规范
-│       ├── system-overview.md             # CodeStable 体系总览 + 场景路由
-│       └── ...
-│
-└── AGENTS.md                              # 在项目根，不在 .codestable/ 里
-```
-
-**几条要点：**
-
-- 所有产物都聚在 `.codestable/` 下，让"上次那个 feature / bug 当时怎么搞的"三秒能找到。
-- `requirements/` 是**长效档案**（能力愿景 + 领域术语 CONTEXT.md + 拍板决策 adrs/），`roadmap/` 是**规划层**（接下来怎么走），两者刻意分开。
-- `features/` `issues/` `refactors/` 用 `YYYY-MM-DD-{slug}/` 一个目录装齐所有相关 spec，不交叉。
-- `compound/` 是**唯一**的知识沉淀目录，纯 markdown 无 frontmatter，靠 `grep -r` 检索——好写好搜。
-- `reference/` 是 `cs-onboard` 从技能包复制过来的；要改共享口径，改 `plugins/codestable/skills/cs-onboard/reference/` 模板，新项目 onboard 自动带上新版。
-
-### 硬约束
-
-> Skill 是独立安装单元，运行时**每个 skill 只能看到自己包内的文件**。A 技能的 SKILL.md 里写 `B-skill/reference/xxx.md` 这种引用在运行时**根本读不到**。
->
-> 跨 skill 共享的参考文档必须走"工作项目"这一层：由 `cs-onboard` 从技能包复制到项目的 `.codestable/reference/`，其他 skill 用项目相对路径读取。
-
-要改共享口径，改 `plugins/codestable/skills/cs-onboard/reference/` 下的模板，新项目 onboard 时带上新版本。
-
-完整目录说明和跨 skill 引用约束见 [WORKFLOW.md](./WORKFLOW.md)。
+完整工作流、目录树和跨 skill 引用约束见 [WORKFLOW.md](./WORKFLOW.md)。
 
 ---
 
@@ -448,10 +240,39 @@ CodeStable 面向真实开发场景，对此进行建模，期望通过一个闭
 
 ---
 
+## 技能怎么迭代：工程化的 build → evaluate 闭环
+
+CodeStable 的 skill 不靠"感觉写得更清楚了"来演进，而是**用可复现的实验来证明和优化**。这套方法把"prompt 工程"变成了"有度量的软件工程"。
+
+**两个配套工具（仓库内，不随插件交付）：**
+
+- `build-cs-skill`：skill 的编写协议（prompt-as-code）——把每个 skill 写成"可执行契约"：`## Spec` 状态机作为唯一的路由真相，frontmatter `contracts` 锚定行为不变量，散文降到最少。
+- `eval-cs-skill`：skill 的评测引擎——把 skill 的关键决策做成 **decision fixtures**（给定仓库状态 → 期望的下一步），让真实模型跨供应商（Claude / GPT）多次作答，用程序机械判分（`[measured]`），而不是靠人或裁判打分。
+
+**闭环：** `编写 → 评测 → 定位失败 → 优化 → 复评 → 结论回写方法论`。
+
+一次真实成果（2026-07，7 个主入口 skill × 3 模型 × 每题 3 次，见 `experiments/*/results.md`）：把 skill 从"规则散落在文档里"重写成"`Spec` 作为唯一的 prompt 路由真相"后，历史 campaign 的路由决策正确率**从均值 0.807 提升到 0.975**；且用数据否定了一个直觉误区——"新旧两种写法并排放"反而有害（某 skill 上比不改还低）。这些量化结论已回写进 `build-cs-skill` 的 authoring 规则，指导后续所有 skill 的编写。后续状态 schema / fixtures 变化须重新测量，不沿用旧 artifacts 为当前 HEAD 背书。
+
+**再进一层：结果层评测（从"路由对不对"到"活干得好不好"）**。用**种子仓库**（自建、零训练污染、含演进历史与真实"做旧"）+ **隐藏验收测试**（模型不可见，跑完机械判分）+ **真 agent 端到端跑**，让 `cs-issue` / `cs-feat` 的产出被测试判定，并对照"有 skill vs 裸 agent"回答 skill 值不值得存在。约 90 次真实全流程后的**诚实结论**（方案与数据见 `docs/cs-skill-e2e-eval-plan.md`、`experiments/*-e2e-*/results.md`）：
+
+- **修复/实现能力对现代模型已是天花板**——协同根因、症状误导类 bug，连小模型都能一次修对；skill 的可测价值**不在"帮模型把活干对"**。
+- **真实增益在过程契约**：有 skill 的组稳定产出 fix-note / design 等可追溯产物，裸 agent 零产物——买到的是组织记忆和可复核性，代价约 +20~30% token。
+- **design 阶段对弱模型有方向性增益**（隐含需求覆盖），与路由层"增益集中在非顶级模型"同构。
+
+**生产反馈也接进同一个闭环**：一次真实使用中发现 `cs-feat` 在 review 第二轮由主 agent 本地自审、没派独立审查。分诊定位为主入口缺 P1 约束 + 规则没点名"每一轮"，修复后固化成回归 fixture（模型提及独立 reviewer：修复前 1/9 → 后 9/9）——**生产偶发变成机械护栏**。
+
+> 认知诚实是这套体系可信度的来源：每次"skill 好像有问题"，分诊纪律都先排查评测自己的缺陷（题目偏差、环境缺失、判分口径）——反复发现问题多在评测侧，skill 与模型被证明是讲道理的。所有数值带 `[measured]/[soft]/[underpowered]`，假设先于实验冻结注册。
+
+---
+
 ## Roadmap
 
 CodeStable 会根据模型能力的发展进行调整。如果未来某个模型做到某个模块的稳定产出，那么这个模块就可以删除。
 
+- [x] 简化 cs skills 体系：核心保留 `cs-feat` / `cs-epic` / `cs-issue` 等主入口，兼容入口收薄
+- [x] 端到端测评 · 基础路由评测：decision fixtures + 跨模型机械判分，[measured] 证明重构增益
+- [x] 端到端测评 · 效果评测：种子仓库 + 隐藏验收测试 + 真 agent 对照裸 agent，`cs-issue`/`cs-feat` 已跑，诚实测出能力边界与过程契约价值
+- [ ] 效果评测扩容：cs-epic 多子 feature 端到端；design 对弱模型增益补统计功效
 - [ ] 代码重构流程需要强化（`cs-refactor` 还在 beta）
 - [ ] ……
 

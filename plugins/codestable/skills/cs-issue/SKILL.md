@@ -1,104 +1,174 @@
 ---
 name: cs-issue
-description: Issue 流程路由。触发：修 bug/有问题/修复 XX；按状态进入 report/analyze/fix。
+description: "Issue 主入口。用于修复 bug / 诊断报错 / 定位既有行为异常，从问题恢复并推进 report、analyze、fix、review。不要用于新增功能(cs-feat)、行为等价重构(cs-refactor)、对外文档(cs-docs)、大需求拆解(cs-epic)。"
+argument-hint: "[--stage report|analyze|fix] <issue>"
+contracts:
+  - grep: "restoreIssueStage"
+  - grep: "progressive reference loading"
+  - grep: "fix-note"
+  - not-grep: "git push"
+  - not-grep: "read all references"
 ---
 
 # cs-issue
 
 ## 启动必读
 
-开始任何判断或动作前，先执行 CodeStable preflight：读 `.codestable/attention.md`；缺失先 `cs-onboard`；不读外部 AI 入口替代（详见 `.codestable/reference/execution-conventions.md`）。
+动作前先跑 CodeStable preflight：读 `.codestable/attention.md`（缺失先 `cs-onboard`）；不要用 `AGENTS.md`/`CLAUDE.md` 等外部入口代替它；细则见 `.codestable/reference/execution-conventions.md`。
 
-修 bug 直觉是"找到错的地方改了完事"，但这个直觉路径反复制造同样的麻烦：
+`cs-issue` 是问题修复的唯一推荐入口，是一个 workflow skill：从仓库事实恢复当前阶段、加载对应阶段协议、在人工 checkpoint 停下。它把问题从记录、根因分析、定点修复、验证、fix-note 和 code review 衔接到闭环。真正的 report/analyze/fix 怎么做由各阶段 protocol 负责（见下方 Progressive Reference Loading）。
 
-1. 问题描述只在脑子里改完就忘——三个月后 bug 再现没复现步骤留存
-2. 根因没分析就动手——改了表面现象深层问题等下次爆发
-3. 修复范围扩散——发现一个 bug 顺手改五处引入新问题，无法追溯
-4. 没验收闭环——怎么判断改好了？改好了什么？没记录
+旧阶段技能 `cs-issue-report`、`cs-issue-analyze`、`cs-issue-fix` 长期保留为兼容入口，只传入 `requested_stage`。
 
-issue 工作流在"看到问题"和"动手改代码"之间塞缓冲：
+## 入口意图
 
+本次调用参数：$ARGUMENTS
+
+意图来源按优先级：调用参数 flag > 兼容入口预设 > 用户话术。参数为空或未被替换（仍是字面 `$ARGUMENTS`）时跳过该来源；调用参数用 `--stage report|analyze|fix` 表示阶段意图，其余文本作为问题描述。旧裸 token（如 `fix`）只作为历史提示词兼容识别；新文档和新调用一律用 `--stage`。
+
+无参数默认行为：没有 flag / 问题描述时，不猜阶段；扫描 `.codestable/issues/`、目标产物和当前 git diff，用状态机恢复下一步。若没有可恢复 issue 且用户原话也没有问题目标，返回 `NeedsHuman` 问处理哪个 issue。
+
+入口意图不覆盖仓库事实。若 report 已存在但用户从 report 兼容入口进来，继续 analyze；若代码已改但无 fix-note，进入 fix 验证/记录。
+
+## Spec
+
+```haskell
+csIssue :: IssueRequest -> IssueOutcome
+
+data IssueRequest = IssueRequest
+  { requestedStage : Maybe Stage         -- report | analyze | fix
+  , userGoal       : Maybe Text
+  , repoFacts      : RepoFacts           -- 优先于 args / 聊天历史
+  }
+
+data Stage = Report | Analyze | Fix | CodeReview | FastPath
+
+data IssueState = IssueState             -- 全部从 .codestable/issues/{slug}/ 恢复
+  { issueDir     : Maybe Path
+  , hasReport    : Bool
+  , rootCause    : Unknown | Clear       -- 读代码后根因是否明确
+  , hasAnalysis  : Bool
+  , codeStatus   : NotStarted | Changed  -- 当前 git diff
+  , hasFixNote   : Bool
+  , reviewStatus : Missing | Passed | Blocking
+  }
+
+data IssueOutcome
+  = RoutedTo Stage
+  | HumanCheckpoint CheckpointReason
+  | Completed IssueSummary
+  | NeedsHuman Reason
+
+data CheckpointReason = ConfirmReport | ConfirmFixPlan | ConfirmFastPath | AmbiguousIssueTarget
 ```
-发现问题 → 清晰记录（report）→ 根因分析（analyze）→ 定点修复 + 验证（fix）
+
+`restoreIssueStage` 从仓库事实选下一步（新增能力而非坏掉的既有行为 → 路由 `cs-feat`）：
+
+```haskell
+restoreIssueStage :: IssueState -> EntryIntent -> IssueOutcome
+restoreIssueStage(s, intent)
+  | ambiguousTarget(s, intent)                          -> NeedsHuman "which issue?"
+  | isNewCapability(intent)                             -> RoutedTo <cs-feat>   -- 非 bug
+  | not s.hasReport                                     -> RoutedTo Report
+  | s.hasReport && s.rootCause == Clear && smallFix(s) && not crossModule(s)
+      -> HumanCheckpoint ConfirmFastPath                                        -- 确认后直接 fix，仍写 fix-note
+  | s.hasReport && s.rootCause == Unknown && not s.hasAnalysis -> RoutedTo Analyze
+  | s.hasAnalysis && s.codeStatus == NotStarted        -> RoutedTo Fix
+  | s.codeStatus == Changed && not s.hasFixNote        -> RoutedTo Fix          -- 验证/记录部分
+  | s.hasFixNote && s.reviewStatus == Missing          -> RoutedTo CodeReview
+  | s.reviewStatus == Blocking                         -> RoutedTo Fix          -- 窄修复，修完重跑 review
+  | s.reviewStatus == Passed                           -> Completed summary     -- 汇报完成，提示 docs/neat 候选
 ```
 
-本技能不写任何东西，只看当前 issue 走到哪步、决定触发哪个子技能。
+`restoreIssueStage` 是唯一路由真相：启动后扫描 `.codestable/issues/`、读取目标 issue 产物、检查当前 git diff 恢复 `IssueState`，按上方分支选下一步；各 stage 加载哪个 protocol 见下方 Progressive Reference Loading。
 
----
+## Workflow
+
+主执行主线（每次调用按序走；各 stage "怎么做" 的厚规则见对应 protocol，本节只定顺序与边界）：
+
+```haskell
+workflow :: IssueRequest -> IssueOutcome
+workflow = preflight >=> parseEntryIntent >=> restoreIssueStage
+       >=> loadStageProtocol >=> executeOrRoute >=> exitRecoverable
+
+preflight         -- 读 .codestable/attention.md；缺失 -> route to cs-onboard；不得用 AGENTS.md/CLAUDE.md 代替
+parseEntryIntent  -- flag > compat-preset > utterance；repoFacts override requestedStage；空参不推断 stage
+restoreIssueStage -- 扫 .codestable/issues/ + artifact + git diff 恢复 IssueState，选 next stage（见 Spec）；
+                  -- 新增能力（非 bug）-> route to cs-feat
+loadStageProtocol -- stageProtocol 映射（见下节）；进 stage 才加载该 stage 一个 protocol
+executeOrRoute    -- report/analyze 落盘 artifact；fix 循环修复+验证+写 fix-note；遇 HumanCheckpoint 必停
+exitRecoverable   -- fix-note 必出（根因/改动/验证/遗留风险），next stage 或 checkpoint reason 明确
+```
 
 ## 文件放哪儿
 
-```
+```text
 .codestable/issues/{YYYY-MM-DD}-{slug}/
-├── {slug}-report.md           ← 阶段 1 问题报告
-├── {slug}-analysis.md         ← 阶段 2 根因分析
-└── {slug}-fix-note.md         ← 阶段 3 修复记录（必出产物）
+├── {slug}-report.md
+├── {slug}-analysis.md
+└── {slug}-fix-note.md
 ```
 
-日期取**发现 / 提报问题当天**定了不动。slug 能一眼看出是什么问题（`auth-token-leak`、`null-pointer-on-empty-list`）。
+日期取发现/提报问题当天。`fix-note.md` 是必出产物，即使走快速通道也要写。
 
-`{slug}-fix-note.md` 是阶段 3 **必出产物**——无论修复简单还是复杂都要写。它不是仪式，是回溯凭证：没有它下次类似问题来你只能从 git log 反推。
+## Progressive Reference Loading
 
-所有 issue 文档带 YAML frontmatter（`doc_type` 分别为 `issue-report` / `issue-analysis` / `issue-fix`）便于 `search-yaml.py` 按 severity / tags / status 检索。
+```haskell
+stageProtocol :: Stage -> Protocol
+stageProtocol Report     = "references/report/protocol.md"
+stageProtocol Analyze    = "references/analyze/protocol.md"
+stageProtocol Fix        = "references/fix/protocol.md"   -- 必要时 references/fix/reference.md
+stageProtocol CodeReview = skill "cs-code-review"         -- 公开横切 skill
+stageProtocol FastPath   = stageProtocol Fix              -- 确认后直接 fix（见「快速通道」），仍写 fix-note
 
----
+-- 惰性加载（progressive reference loading）：进入某阶段才加载该阶段一个 protocol，不在启动时读全部
+-- 禁止：启动即读全部 references；用 fix 协议做 report；code review 未过就当修复完成
+```
 
-## 两条路径
+## 快速通道
 
-### 标准路径（问题复杂或根因不明）
+快速通道（`FastPath`）是 `cs-issue` 内部模式，不是单独技能。必须同时满足：
 
-| 阶段 | 子技能 | 主导 | 产出 |
-|---|---|---|---|
-| 1 问题报告 | `cs-issue-report` | 用户描述，AI 引导 | `{slug}-report.md` |
-| 2 根因分析 | `cs-issue-analyze` | AI 读代码分析，用户确认 | `{slug}-analysis.md` |
-| 3 修复验证 | `cs-issue-fix` | AI 按分析定点修复，用户验证 | 代码 + `{slug}-fix-note.md` + scoped-commit |
+1. 读代码后能指出明确根因。
+2. 修复很小，通常 1-2 处。
+3. 无跨模块影响风险。
 
-阶段间有人工 checkpoint——让用户在每阶段结束有一次明确把关，防止 AI 一口气从问题跑到代码跑出来才发现走偏。
+不满足就走标准 report → analyze → fix。进入标准路径后默认不再二次改判，避免阶段之间口径漂移。
 
-### 快速通道（问题简单、根因一眼确定）
+## 人工 checkpoint
 
-下面**同时满足**才进：
+`ConfirmFastPath` / `AmbiguousIssueTarget` 的触发时机以 Spec 的 `restoreIssueStage` 为唯一权威；`ConfirmReport` / `ConfirmFixPlan` 在对应 stage protocol 完成产物时触发。本节只定义停下后的行为：
 
-1. AI 读完代码后对根因高度有把握（能明确指出 file:line + 原因）
-2. 修复改动很小（1-2 处）
-3. 无跨模块影响风险
+```haskell
+onCheckpoint :: CheckpointReason -> Action
+onCheckpoint ConfirmReport        = 停等用户确认问题描述、复现、期望/实际、环境、严重度   -- report 产物落盘后触发
+onCheckpoint ConfirmFixPlan       = 停等用户确认推荐修复方案和风险                       -- analyze 产物落盘后触发
+onCheckpoint ConfirmFastPath      = 停等用户确认根因明确、改动小、无跨模块风险            -- 走快速通道前触发
+onCheckpoint AmbiguousIssueTarget = NeedsHuman "which issue?"
+```
 
-流程压缩成：AI 读代码 → 直接告知根因 + 修复方案 → 用户确认 → AI 修复 → 用户验证通过 → AI 写 `{slug}-fix-note.md`。只产出一份 `fix-note.md`，省掉 report 和 analysis。
+fix 阶段的验证结果和 review blocking 处理按协议循环，不在每步默认打断用户。
 
-**判定口径**：是否进快速通道由 `cs-issue-report` 的启动检查做唯一正式判定。一旦进标准路径默认不再二次改判——避免三个阶段对路径各说各话。
+## Failure Behavior
 
-**不能**走快速通道：根因有多个候选 / 修复范围涉及多模块 / 需要先复现才能定位 / 用户希望留完整分析存档。
+```haskell
+needsHuman :: Situation -> Bool
+needsHuman s = attentionMissing s          -- .codestable/attention.md 缺失 -> 先 cs-onboard
+            || noRecoverableIssue s        -- 无可恢复 issue 目标
+            || ambiguousScope s            -- issue 范围模糊
+            || stageConflictsRepoFacts s   -- requested stage 与仓库事实冲突
+            || isNewCapability s           -- 问题实为新增能力 -> cs-feat
+            || needsProductJudgement s     -- 修复需产品判断而非定点修复
+```
 
----
+报告：当前 issue 目录、阻塞原因、下一步用户动作、已写文件、是否可安全重试。
 
-## 路由
+## 退出条件
 
-进入本技能先 Glob `.codestable/issues/`，自己读已有文件才有数。
+```haskell
+mayExit :: State -> Bool
+mayExit s = fixNoteComplete s   -- {slug}-fix-note.md 已写明根因、改动、验证和遗留风险
+         && reviewSettled s     -- 必要 code review 已通过或阻塞项已清楚交回
+```
 
-| 当前状态 | 触发哪个子技能 |
-|---|---|
-| 刚发现问题，没有任何文件 | `cs-issue-report`（那里判断走标准还是快速） |
-| `report.md` 已存在，没 `analysis.md` | `cs-issue-analyze` |
-| `analysis.md` 已存在，代码还没改 | `cs-issue-fix` |
-| 代码已改，还没修复验证记录 | `cs-issue-fix`（走验证） |
-| 不确定 | 自己读已有文件按上表对号 |
-
-用户描述的是**新功能需求而不是 bug** → 告诉用户走 `cs-feat`。
-
----
-
-## 与 feature 工作流的边界
-
-- issue：本来应该好的东西坏了——已有代码里的 bug / 异常行为 / 文档错误 / 性能问题
-- feature：从来没有的东西要加进来——新功能 / 新能力
-
-灰色地带：修 issue 过程中发现需要新增能力才能真正解决——**先用 issue 工作流把记录和分析做完，再视情况开 feature**。不在 issue 里偷偷做新功能，理由跟 feature 不在 PR 里偷偷修 bug 一样：混着改分不清这次到底改了什么范围。
-
----
-
-## 相关文档
-
-- `.codestable/reference/system-overview.md` — CodeStable 体系总览
-- `.codestable/reference/shared-conventions.md` — 跨阶段共享口径
-- `.codestable/attention.md` — CodeStable 启动注意事项和项目硬约束
-- `.codestable/requirements/CONTEXT.md` + `requirements/adrs/` — 根因分析时可能要查的领域术语与拍板决策
+修复暴露新 feature 需求时，不在 issue 内偷做，另开 `cs-feat`。

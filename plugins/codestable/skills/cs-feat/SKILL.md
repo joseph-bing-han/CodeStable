@@ -1,130 +1,244 @@
 ---
 name: cs-feat
-description: Feature 路由入口。触发：新功能/加 X/实现 XX，按状态进入 design/impl/review/QA/accept。
+description: "Feature 主入口。用于新功能或功能改造，从需求恢复并推进 design、design-review、goal package、implementation、code review、QA、acceptance。不要用于单纯 bug 修复(cs-issue)、行为等价重构(cs-refactor)、对外文档(cs-docs)、大需求拆解(cs-epic)。"
+argument-hint: "[--stage design|design-review|impl|qa|accept|goal-package] [--mode fastforward] <feature>"
+contracts:
+  - grep: "restoreFeatureStage"
+  - grep: "DispatchGoalDriver"
+  - grep: "progressive reference loading"
+  - grep: "must not auto-approve design"
+  - grep: "独立 Task agent reviewer"
+  - grep: "design-review passed"
+  - grep: "不重复读取这些全局输入"
+  - not-grep: "git push"
+  - not-grep: "read all references"
 ---
 
 # cs-feat
 
 ## 启动必读
 
-开始任何判断或动作前，先执行 CodeStable preflight：读 `.codestable/attention.md`；缺失先 `cs-onboard`；不读外部 AI 入口替代（详见 `.codestable/reference/execution-conventions.md`）。
+动作前先跑 CodeStable preflight：读 `.codestable/attention.md`（缺失先 `cs-onboard`）；不要用 `AGENTS.md`/`CLAUDE.md` 等外部入口代替它；细则见 `.codestable/reference/execution-conventions.md`。
 
-新功能流程在"需求"和"代码"之间塞了一份方案文件，让两边有交接点——AI 直接拿到需求就写代码会出三个老问题：名字跟原代码对不上、改着改着改出范围、改完不留存档。
+`cs-feat` 是 feature 的唯一推荐入口，是一个 workflow skill：从仓库事实恢复当前阶段、加载对应阶段协议、在人工 checkpoint 停下。用户只需持续调用本技能；本技能在 design gate 停下来等用户确认。确认 design 后默认生成单 feature goal 包，并尝试通过可见 Task agent goal driver 长程执行；派发失败则打印 `/goal` 指令让用户粘贴执行。真正的 design/QA/acceptance 怎么做由各阶段 protocol 负责（见下方 Progressive Reference Loading）。
 
+## 入口意图
+
+本次调用参数：$ARGUMENTS
+
+意图来源按优先级：调用参数 flag > 兼容入口预设 > 用户话术。参数为空或未被替换（仍是字面 `$ARGUMENTS`）时跳过该来源；`--stage <stage>` 表示阶段意图，`--mode <mode>` 表示执行模式，其余文本作为需求描述。
+
+| 参数 | 入口意图 |
+|---|---|
+| `--stage design` | `requested_stage: design` |
+| `--stage design-review` | `requested_stage: design-review` |
+| `--stage impl` | `requested_stage: implementation` |
+| `--stage qa` | `requested_stage: qa` |
+| `--stage accept` | `requested_stage: acceptance` |
+| `--stage goal-package` | `requested_stage: goal-package` |
+| `--mode fastforward` | `requested_mode: fastforward` |
+
+入口意图只是偏好；**仓库事实优先**（`restoreFeatureStage`），也优先于聊天历史。
+
+无参数默认行为：没有 flag / 需求描述时，不猜阶段；扫描 `.codestable/features/`、目标产物与当前 git diff，用状态机恢复下一步。没有可恢复 feature 且用户原话也无新功能目标时，返回 `NeedsHuman` 问处理哪个 feature。
+
+## Spec
+
+```haskell
+csFeat :: FeatureRequest -> FeatureOutcome
+
+data FeatureRequest = FeatureRequest
+  { requestedStage : Maybe Stage
+  , requestedMode  : Maybe Mode          -- fastforward
+  , userGoal       : Maybe Text
+  , repoFacts      : RepoFacts           -- 优先于 args / 聊天历史
+  }
+
+data Stage = Design | DesignReview | GoalPackage | Implementation | CodeReview | QA | Acceptance | FastForward
+
+data DesignReviewStatus = ReviewMissing | ReviewPassed | ChangesRequested | ReviewBlocked
+
+data GoalRunState                        -- 从 goal-state.yaml 的 stage/status/driver 字段恢复
+  = GoalMissing
+  | GoalReadyToDispatch                  -- implementation / ready-to-dispatch
+  | GoalDriverActive DriverInfo          -- driver_kind + driver_id；仅非终态生效
+  | GoalImplementationRunning            -- implementation / running
+  | GoalReviewReady | GoalReviewFixing    -- review / ready|fixing
+  | GoalQAReady | GoalQAFixing            -- qa / ready|fixing
+  | GoalAcceptanceReady                  -- acceptance / ready
+  | GoalComplete                         -- complete / passed；优先于残留 driver 元数据
+  | GoalHandoffBlocked Reason            -- handoff / blocked；优先于残留 driver 元数据
+  | GoalUnknown Text
+
+data FeatureState = FeatureState          -- 全部从 .codestable/features/{slug}/ 恢复
+  { featureDir         : Maybe Path
+  , designStatus       : Missing | Draft | Approved
+  , designReviewStatus : DesignReviewStatus
+  , goalRunState       : GoalRunState
+  , epicChildBatch     : Bool             -- cs-epic 批量上下文，非公开参数
+  }
+
+data FeatureOutcome
+  = RoutedTo Stage
+  | HumanCheckpoint CheckpointReason
+  | DispatchGoalDriver Command            -- 先尝试可见 Task agent；失败才降级为 GoalHandoff
+  | GoalHandoff Command                   -- 可粘贴 `/goal` 或 driver handoff
+  | ReportDriver DriverInfo               -- 已有可见 driver：只汇报，不重复派发
+  | Completed FeatureSummary
+  | NeedsHuman Reason
+
+data CheckpointReason = ConfirmDesign | ConfirmScopeChange
 ```
-(想法模糊先去 cs-brainstorm 分诊) → 方案设计（名词层 + 编排层 + 验收契约 + 推进策略切片）→ 分步实现 → 代码审查 → QA 验证 → 验收闭环
+
+`restoreFeatureStage` 从仓库事实选下一步（**must not auto-approve design**：design-review passed 后必须停等用户确认）：
+
+```haskell
+restoreFeatureStage :: FeatureState -> EntryIntent -> FeatureOutcome
+restoreFeatureStage(s, intent)
+  | ambiguousTarget(s, intent)                     -> NeedsHuman "which feature?"
+  | changesApprovedScope(s, intent)                -> HumanCheckpoint ConfirmScopeChange
+  | wantsFastForward(intent) && ffEligible(s)      -> RoutedTo FastForward
+  | wantsFastForward(intent) && not ffEligible(s)  -> RoutedTo Design            -- 不合格（含跨公开契约/大范围）：结果是 RoutedTo Design（不是 NeedsHuman、不是 checkpoint），在推进 design 的同时说明降级原因
+  | s.designStatus == Missing                      -> RoutedTo Design
+  | s.designStatus == Approved && s.designReviewStatus /= ReviewPassed
+      -> NeedsHuman "approved design lacks passed design-review"
+  | s.designReviewStatus in [ChangesRequested, ReviewBlocked] -> RoutedTo Design
+  | s.designStatus == Draft && s.designReviewStatus == ReviewMissing -> RoutedTo DesignReview
+  | s.designReviewStatus == ReviewPassed && s.designStatus /= Approved
+      -> if s.epicChildBatch then RoutedTo <return-to-cs-epic> else HumanCheckpoint ConfirmDesign
+  | s.goalRunState == GoalMissing                  -> RoutedTo GoalPackage
+  | s.goalRunState == GoalComplete                 -> Completed summary
+  | s.goalRunState is GoalHandoffBlocked reason    -> GoalHandoff (handoffCommand reason)
+  | s.goalRunState is GoalDriverActive driver      -> ReportDriver driver
+  | s.goalRunState == GoalReadyToDispatch          -> DispatchGoalDriver "/goal"
+  | s.goalRunState == GoalImplementationRunning    -> RoutedTo Implementation
+  | s.goalRunState == GoalReviewReady              -> RoutedTo CodeReview
+  | s.goalRunState == GoalReviewFixing             -> RoutedTo Implementation   -- review-fix
+  | s.goalRunState == GoalQAReady                  -> RoutedTo QA
+  | s.goalRunState == GoalQAFixing                 -> RoutedTo Implementation   -- qa-fix，修完重跑 review+QA
+  | s.goalRunState == GoalAcceptanceReady          -> RoutedTo Acceptance
+  | s.goalRunState is GoalUnknown raw              -> NeedsHuman ("unknown goal-state: " <> raw)
 ```
 
-brainstorm 是讨论层独立入口，会分诊：case 1（清楚 → 直接 design）/ case 2（小需求继续讨论 → 落 brainstorm note）/ case 3（大需求 → 移交 `cs-roadmap`）。只有 case 2 在 feature 目录产出 brainstorm note。
+## Workflow
 
-本技能不写代码不写文档，只做一件事：看当前 feature 走到哪步，告诉用户该触发哪个子技能。
+主执行主线（每次调用按序走；各 stage "怎么做" 的厚规则见对应 protocol，本节只定顺序与边界）：
 
----
+```haskell
+workflow :: FeatureRequest -> FeatureOutcome
+workflow = preflight >=> parseEntryIntent >=> restoreFeatureStage
+       >=> loadStageProtocol >=> executeOrRoute >=> exitRecoverable
+
+preflight           -- 读 .codestable/attention.md；缺失 -> route to cs-onboard；不得用 AGENTS.md/CLAUDE.md 代替
+parseEntryIntent    -- flag > compat-preset > utterance；repoFacts override requestedStage；空参不推断 stage
+restoreFeatureStage -- 扫 .codestable/features/ + artifact + git diff 恢复 FeatureState，选 next stage（见 Spec）
+loadStageProtocol   -- stageProtocol 映射（见下节）；进 stage 才加载该 stage 一个 protocol
+executeOrRoute      -- authoring stage（design/design-review/goal-package）落盘 artifact；
+                    -- DispatchGoalDriver 先尝试可见 driver，失败才输出 GoalHandoff；遇 HumanCheckpoint 必停
+exitRecoverable     -- artifact 已落盘 / next stage 明确 / checkpoint reason 明确，任一即可让下次调用从 repoFacts 恢复
+```
 
 ## 文件放哪儿
 
-```
-.codestable/features/{feature}/
-├── {slug}-brainstorm.md       ← 阶段 0 产物（仅 case 2 落盘）
-├── {slug}-intent.md           ← 阶段 1 可选前置草稿（用户自己写半成品）
-├── {slug}-design.md           ← 阶段 1 方案文件
-├── {slug}-design-review.md    ← 阶段 1.5 人审前方案审查报告
-├── {slug}-checklist.yaml      ← 阶段 1 生成 steps + checks，2/3 阶段更新 status
-├── {slug}-review.md           ← 阶段 2.5 代码审查报告
-├── {slug}-qa.md               ← 阶段 2.6 QA 验证报告
-└── {slug}-acceptance.md       ← 阶段 3 验收报告
+```text
+.codestable/features/{YYYY-MM-DD}-{slug}/
+├── {slug}-design.md / {slug}-checklist.yaml
+├── {slug}-design-review.md
+├── goal-plan.md / goal-state.yaml / goal-protocol.md
+├── {slug}-review.md / {slug}-qa.md / {slug}-acceptance.md
+└── {slug}-ff-note.md          # 仅 fastforward
 ```
 
-目录命名 `YYYY-MM-DD-{英文 slug}`，日期取首次创建当天定了不动；slug 小写字母 / 数字 / 连字符。
+目录命名取首次创建当天，slug 小写字母/数字/连字符。feature 过程发现的 bug 另开 issue，不在 feature 里偷修。
 
-为什么聚一起：以后查"那个导出 CSV 功能当时怎么决定的"，brainstorm / design / review / QA / acceptance 都在一处。feature 和 issue 分别放在 `.codestable/features/` 和 `.codestable/issues/` 因为归档逻辑不一样。
+## Progressive Reference Loading
 
-实现 feature 时顺手发现的 bug → 记成新 issue，**不在 feature PR 里偷偷修**——验收时分不清范围，git blame 找不到为什么改。
+```haskell
+stageProtocol :: Stage -> Protocol
+stageProtocol Design         = "references/design/protocol.md"          -- 必要时 support/intent-template.md、codebase-design.md
+stageProtocol DesignReview   = "references/design-review/protocol.md"   -- gate 纪律见下
+stageProtocol GoalPackage    = "references/goal/protocol.md"
+stageProtocol Implementation = "references/implementation/protocol.md"  -- 必要时 support/reference.md、tdd.md
+stageProtocol CodeReview     = skill "cs-code-review"                   -- 公开横切 skill
+stageProtocol QA             = "references/qa/protocol.md"
+stageProtocol Acceptance     = "references/acceptance/protocol.md"
+stageProtocol FastForward    = "references/fastforward/protocol.md"
 
----
+-- 惰性加载（progressive reference loading）：进入某阶段才加载该阶段一个 protocol，不在启动时读全部
+-- 禁止：启动即读全部 references；用 implementation 协议做 design；code review 未过就进 QA
+```
 
-## 标准阶段
+design-review **gate 必需独立 Task agent reviewer**：主 agent 本地审查不得定稿 review、不得给 `passed`；design 修订后的**每一轮重审同样适用**（round 2+ 不得以"本地重审"代替），降级须 approval-report + 用户明确授权（细则见 protocol）。
 
-| 阶段 | 子技能 | 产出 | 谁主导 |
-|---|---|---|---|
-| 0 brainstorm（可选，独立入口） | `cs-brainstorm` | case 2 时产出 brainstorm note | AI 思考伙伴，用户拍板 |
-| 1 方案设计 | `cs-feat-design` | design.md + checklist.yaml | AI 起草候选方案 |
-| 1.5 方案审查 | `cs-feat-design-review` | design-review.md | Task agent / AI 人审前审查 |
-| 2 分步实现 | `cs-feat-impl` | 代码 + 阶段汇报 | AI 按方案执行 |
-| 2.5 代码审查 | `cs-code-review` | review.md | AI 只读审查，用户决定是否修 |
-| 2.6 QA 验证 | `cs-feat-qa` | qa.md | AI 运行证据，用户确认风险 |
-| 3 验收闭环 | `cs-feat-accept` | acceptance.md | AI 逐层核对，用户终审 |
+## Human Checkpoints
 
-阶段间有 gate 和人工 checkpoint。方案先过 design-review，再交给用户整体确认；用户没明确放行，下一阶段别开始——防止 AI 一口气从需求跑到代码、跑出来才发现走偏。
+触发时机以 Spec 的 `restoreFeatureStage` 为唯一权威；本节只定义停下后的行为：
 
-阶段 0 可选且是 feature 流程的**外部入口**——`cs-brainstorm` 同时服务 feature 和 roadmap。case 3（大需求）讨论被移交给 `cs-roadmap` 不再回 feature 流程；roadmap 拆出子 feature 后从 `cs-feat-design` 的"从 roadmap 条目起头"入口进来。
+```haskell
+onCheckpoint :: CheckpointReason -> Action
+onCheckpoint ConfirmDesign          = 停等用户对 design 整体确认   -- must not auto-approve design，不得直接进 GoalPackage
+onCheckpoint ConfirmScopeChange     = 停等用户确认范围变更
+  -- 仅长程执行中（design 已 approved 后）要改 approved design、feature 范围或公开契约时触发；
+  -- 入口阶段的 fastforward 不合格 / 大范围需求不触发本 checkpoint，直接 RoutedTo Design
+```
 
-### Fastforward 模式
+implementation / code review / QA / acceptance 的普通阻塞优先由 goal driver 按协议循环修复，不在每个阶段默认打断用户。
+driver 不可见、派发失败或 driver 返回 handoff 时走 `GoalHandoff`，不是 `HumanCheckpoint` / `NeedsHuman` 的第二种写法。
 
-需求清楚 + 范围小时走标准流程太啰嗦。fastforward 把 design 压成 4 节（需求摘要 / 设计方案 / 验收标准 / 推进步骤），用户一次确认后直接实现。触发："快速模式"、"fastforward"、"直接开干"、"别那么多步骤"，去 `cs-feat-ff`。
+## Failure Behavior
 
-**别走** fastforward：跨多个子系统、有术语冲突风险、推进步骤超过 4 步——这些情况跳过 design 意味着 AI 和用户没共同确认过同一份方案，实现完容易发现彼此理解不一样。
+```haskell
+needsHuman :: Situation -> Bool
+needsHuman s = attentionMissing s        -- .codestable/attention.md 缺失 -> 先 cs-onboard
+            || noRecoverableFeature s    -- 无可恢复 feature 目标
+            || ambiguousScope s          -- feature 范围模糊
+            || stageConflictsRepoFacts s -- requested stage 与仓库事实冲突
+            || invalidArtifactState s    -- 例如 approved design 没有 passed design-review
+            || unknownGoalState s        -- goal-state.yaml stage/status 无法识别
+```
 
----
+报告：当前 feature 目录、阻塞原因、下一步用户动作、已写文件、是否可安全重试。
 
-## 路由：用户现在该走哪个子技能
+## Output Contract
 
-进入本技能先 Glob 一下 `.codestable/features/` 看已有产物。**不要只听用户口头描述**——用户说"设计写完了"不一定真完整，自己读一遍。
+```haskell
+mustContinue (RoutedTo _)            = True
+mustContinue (DispatchGoalDriver _)  = True
+mustStop     (HumanCheckpoint _)     = True
+mustStop     (GoalHandoff _)         = True
+mustStop     (NeedsHuman _)          = True
+mustStop     (ReportDriver _)        = True
+mustStop     (Completed _)           = True
+```
 
-| 当前状态 | 触发哪个子技能 |
-|---|---|
-| 想法模糊，说不清真问题 / 边界 / 不做什么 | `cs-brainstorm` |
-| 想法清晰（知道做什么 / 为谁 / 怎么算成功） | `cs-feat-design` |
-| 用户说"开一个新需求 / 起草稿 / 新建 feature"想自己写半成品 | `cs-feat-design` 的"初始化模式"（建目录 + 空 intent，让用户填完再回） |
-| 用户主动说"先 brainstorm 一下"、"有个想法没想清楚" | `cs-brainstorm` |
-| `{slug}-intent.md` 已填好 | `cs-feat-design`（读 intent 作输入） |
-| 用户说"快速模式 / fastforward" | `cs-feat-ff` |
-| `{slug}-brainstorm.md` 已存在，要进设计 | `cs-feat-design` |
-| `{slug}-design.md` 是 draft 且没有 `{slug}-design-review.md` | `cs-feat-design-review` |
-| `{slug}-design-review.md` changes-requested / blocked | `cs-feat-design` 修订后重跑 `cs-feat-design-review` |
-| `{slug}-design-review.md` passed，但 design 还没 approved | 交给用户整体 review，确认后回 `cs-feat-design` 标 approved |
-| `{slug}-design.md` 已 approved、代码没动 | `cs-feat-impl` |
-| fastforward design 已确认 | `cs-feat-impl` |
-| 代码已写完但没有 `{slug}-review.md` | `cs-code-review` |
-| `{slug}-review.md` 有 unresolved blocking findings | `cs-feat-impl` 的 review-fix 模式 |
-| `{slug}-review.md` 已 passed，但没有 `{slug}-qa.md` | `cs-feat-qa` |
-| `{slug}-qa.md` failed / blocked | `cs-feat-impl` 的 qa-fix 模式（修完重跑 review → QA） |
-| `{slug}-qa.md` 已 passed，代码要验收 | `cs-feat-accept` |
-| 用户直接说"代码已写完要验收"但没有 review 报告 | 先 `cs-code-review`，不要跳到 accept |
-| 用户直接说"代码已写完要验收"但没有 QA 报告 | review passed 后先 `cs-feat-qa`，不要跳到 accept |
-| 用户说"我想要一个 X 系统"大需求 | 转 `cs-brainstorm` 分诊（大概率 case 3 → `cs-roadmap`） |
-| roadmap 里某条子 feature 该启动 | `cs-feat-design` 的"从 roadmap 条目起头"入口 |
-| 不确定 design 是否完整 | 自己读一遍，按上面对号 |
+退出或交接时必须报告：feature 目录、恢复出的 `goalRunState`、本轮写入文件、下一动作或 checkpoint、已运行验证。`DispatchGoalDriver` 不得直接退化成 `/goal`：先按 agent conventions 尝试可见 driver，只有不可用或派发失败才输出 `GoalHandoff`。
 
-### 怎么判断该不该走阶段 0
+## Fastforward
 
-判断信号不是"用户描述字数少"，是用户能不能清楚说出三件事：要解决的真问题 / 核心行为 / 一条明确的"不做什么"。三项有一项模糊就值得 brainstorm。
+`requested_mode: fastforward` 只是模式请求，不是跳过安全的许可。进入前确认范围小、需求清楚、无跨系统术语/契约风险；不合格则解释原因并回标准 design 流程。产物固定 `{slug}-ff-note.md`，不生成标准 design/checklist/QA/acceptance 套件。`cs-feat-ff` 是兼容入口，不再单独维护快速模式规则。
 
-但别强推——用户明确说"想清楚了直接做设计"就尊重。不确定时问一句让用户选。**宁可漏判，别误判**——逼一个想清楚的用户做发散是浪费。
+## Epic 子 Feature 批量上下文
 
-### brainstorm vs intent
+`cs-epic` 批量生成子 feature design 时以内部上下文 `epicChildBatch: true` 调用（非公开参数，不写入 argument-hint）。**该上下文还表示 CONTEXT / adrs / compound 等全局输入已由 `cs-epic` 在批量开始时统一加载，design 阶段复用、不重复读取这些全局输入**（幂等，省掉 N 个子 feature 各扫一遍）。此时：design-review passed 后 design 保持 `draft`、**不执行单 feature 的人工整体 review checkpoint**、不改 approved；design-review passed 但未 approved 时**不在这里停，回到 `cs-epic` 继续下一个子 feature**，等所有 design 统一确认；回写 design/checklist/design-review/items.yaml 后返回 `cs-epic`，**不得用 final answer 要用户确认单个 child**；退出前运行 `python3 <cs-onboard skill 目录>/tools/codestable-workflow-next.py feature --feature .codestable/features/YYYY-MM-DD-{slug} --epic-child-batch --json`，若输出 `final_answer_allowed: false` 按 `next_action` 交回 `cs-epic`。单独调用 `cs-feat` 或无该上下文时，仍按普通 checkpoint 停。
 
-两者都是 design 前置，区别在**谁在主导收敛**：
+## 兼容入口
 
-- brainstorm：用户脑子里模糊，AI 问用户答。判 case 3 时移交 `cs-roadmap` 不回 feature；只有 case 2 产出 brainstorm note
-- intent：用户自己想好大致做法（100 字描述 + 相关数据结构），懒得口述就写成 `{slug}-intent.md` 给 AI 读
+旧阶段技能保留为兼容入口（`cs-feat-design`、`cs-feat-design-review`、`cs-feat-impl`、`cs-feat-qa`、`cs-feat-accept`、`cs-feat-ff`）：只传入 `requested_stage` / `requested_mode`，不维护独立规则。新文档与新调用一律用 `--stage` / `--mode`。
 
-用户模糊触发"开一个新需求"时默认问"你想先聊清楚（brainstorm）还是自己写草稿（intent）？"，别自己挑。
+## 退出条件
 
----
+```haskell
+mayExit :: State -> Bool
+mayExit s = artifactPersistedAndRecoverable s   -- 当前阶段产物已落盘，状态可由 restoreFeatureStage 从仓库事实恢复
+         && nextClearlyStated s                 -- 阻塞项、HumanCheckpoint 或下一阶段已明确说明
 
-## 与 issue 工作流的边界
+fullyDone :: FeatureState -> Bool               -- 标准流程最终门槛
+fullyDone s = designApproved s && reviewPassed s && qaPassed s && acceptancePassed s
+```
 
-- feature：从来没有的东西要加进来（新功能 / 新能力）
-- issue：本来应该好的东西坏了（bug / 异常 / 文档错误）
+需要外部文档提示 `cs-docs`；阶段收尾/记忆同步提示 `cs-docs-neat`。
 
-灰色地带：feature 实现时发现的 bug 记成新 issue，不在 feature PR 顺手修。
+## 相关入口
 
----
-
-## 相关文档
-
-- `.codestable/reference/system-overview.md` — CodeStable 体系总览
-- `.codestable/reference/shared-conventions.md` — 跨阶段共享口径、目录结构、checklist 生命周期
-- `.codestable/attention.md` — CodeStable 启动注意事项和项目硬约束
-- `.codestable/requirements/CONTEXT.md` + `requirements/adrs/` — 方案设计阶段需要查的领域术语与拍板决策
+- `cs-code-review`：实现后横切只读审查 gate。
+- `cs-issue` / `cs-refactor` / `cs-docs` / `cs-epic` / `cs-docs-neat`。
