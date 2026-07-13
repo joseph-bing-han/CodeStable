@@ -27,27 +27,27 @@
 Codex plugin marketplace：
 
 ```bash
-codex plugin marketplace add liuzhengdongfortest/CodeStable
+codex plugin marketplace add codestable/CodeStable
 codex plugin add codestable@codestable
 ```
 
 Claude plugin marketplace：
 
 ```text
-/plugin marketplace add liuzhengdongfortest/CodeStable
+/plugin marketplace add codestable/CodeStable
 /plugin install codestable@codestable
 ```
 
 `skills` CLI：
 
 ```bash
-npx skills@latest add liuzhengdongfortest/CodeStable
+npx skills@latest add codestable/CodeStable
 ```
 
 如果你的 `skills` CLI 没有通过 marketplace catalog 发现插件实体，可用深扫兜底：
 
 ```bash
-npx skills@latest add liuzhengdongfortest/CodeStable --full-depth
+npx skills@latest add codestable/CodeStable --full-depth
 ```
 
 CodeStable 插件只打包 `plugins/codestable/skills/` 下的 `cs` / `cs-*` skills；仓库根目录不再保留独立 skill 目录。
@@ -80,7 +80,7 @@ Claude 更新后需要重启 Claude Code 才会应用新版插件。
 npx skills@latest update
 ```
 
-如果旧安装器没有记录来源，重新执行上面的 `npx skills@latest add liuzhengdongfortest/CodeStable` 安装命令即可。升级时应更新完整 CodeStable 插件，不要只替换根 `cs` skill；runtime 刷新还需要同版本的 `cs-onboard` 及其工具。全局插件升级后，建议在每个已接入项目中显式执行 `/cs-onboard --mode refresh-runtime`，立即刷新并核验 repo-local runtime。即使不手动执行，下一次 CodeStable preflight 也会比较 `.codestable/runtime-manifest.json` 与当前插件版本，在 manifest 缺失、版本不匹配或 runtime capability 缺失且受管路径干净时自动刷新；它不会在后台扫描所有仓库。遇到 `managed-paths-dirty`、未接入或骨架不完整时会停下提示，不会强制覆盖。
+如果旧安装器没有记录来源，重新执行上面的 `npx skills@latest add codestable/CodeStable` 安装命令即可。升级时应更新完整 CodeStable 插件，不要只替换根 `cs` skill；runtime 刷新还需要同版本的 `cs-onboard` 及其工具。全局插件升级后，建议在每个已接入项目中显式执行 `/cs-onboard --mode refresh-runtime`，立即刷新并核验 repo-local runtime。即使不手动执行，下一次 CodeStable preflight 也会比较 `.codestable/runtime-manifest.json` 与当前插件版本，在 manifest 缺失、版本不匹配或 runtime capability 缺失且受管路径干净时自动刷新；它不会在后台扫描所有仓库。遇到 `managed-paths-dirty`、未接入或骨架不完整时会停下提示，不会强制覆盖。
 
 只需要一键，开始工作：
 
@@ -281,7 +281,7 @@ CodeStable 会根据模型能力的发展进行调整。如果未来某个模型
 ---
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/chart?repos=liuzhengdongfortest/CodeStable&type=date&legend=top-left)](https://www.star-history.com/?repos=liuzhengdongfortest%2FCodeStable&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/chart?repos=codestable/CodeStable&type=date&legend=top-left)](https://www.star-history.com/?repos=codestable%2FCodeStable&type=date&legend=top-left)
 
 <div align="center">
 
