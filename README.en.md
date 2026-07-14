@@ -25,27 +25,27 @@ Tired of OpenSpec's flimsiness, Oh-My-OpenAgent's over-engineering, and Superpow
 Codex plugin marketplace:
 
 ```bash
-codex plugin marketplace add liuzhengdongfortest/CodeStable
+codex plugin marketplace add codestable/CodeStable
 codex plugin add codestable@codestable
 ```
 
 Claude plugin marketplace:
 
 ```text
-/plugin marketplace add liuzhengdongfortest/CodeStable
+/plugin marketplace add codestable/CodeStable
 /plugin install codestable@codestable
 ```
 
 `skills` CLI:
 
 ```bash
-npx skills@latest add liuzhengdongfortest/CodeStable
+npx skills@latest add codestable/CodeStable
 ```
 
 If your `skills` CLI does not discover the plugin entity through the marketplace catalog, use the deep-scan fallback:
 
 ```bash
-npx skills@latest add liuzhengdongfortest/CodeStable --full-depth
+npx skills@latest add codestable/CodeStable --full-depth
 ```
 
 The CodeStable plugin only packages `cs` / `cs-*` skills under `plugins/codestable/skills/`; the repository root no longer keeps standalone skill directories.
@@ -78,7 +78,7 @@ Restart Claude Code after updating so the new plugin version is applied.
 npx skills@latest update
 ```
 
-If an older installer did not record the source, rerun the `npx skills@latest add liuzhengdongfortest/CodeStable` install command above. Upgrade the complete CodeStable plugin rather than replacing only the root `cs` skill; runtime refresh also requires the matching `cs-onboard` skill and its tools. After the global plugin upgrade, explicitly run `/cs-onboard --mode refresh-runtime` in every onboarded project to refresh and verify its repo-local runtime immediately. If you skip the command, the next CodeStable preflight compares `.codestable/runtime-manifest.json` with the current plugin version and refreshes automatically when the manifest is missing, the version or runtime capabilities do not match, and managed paths are clean; it does not scan repositories in the background. `managed-paths-dirty`, a repository that is not onboarded, or an incomplete skeleton stops the refresh instead of forcing an overwrite.
+If an older installer did not record the source, rerun the `npx skills@latest add codestable/CodeStable` install command above. Upgrade the complete CodeStable plugin rather than replacing only the root `cs` skill; runtime refresh also requires the matching `cs-onboard` skill and its tools. After the global plugin upgrade, explicitly run `/cs-onboard --mode refresh-runtime` in every onboarded project to refresh and verify its repo-local runtime immediately. If you skip the command, the next CodeStable preflight compares `.codestable/runtime-manifest.json` with the current plugin version and refreshes automatically when the manifest is missing, the version or runtime capabilities do not match, and managed paths are clean; it does not scan repositories in the background. `managed-paths-dirty`, a repository that is not onboarded, or an incomplete skeleton stops the refresh instead of forcing an overwrite.
 
 One command to start working:
 
