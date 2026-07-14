@@ -161,7 +161,7 @@ CodeStable models real coding work as a set of **entities** and **flows**.
 
 | Flow | Recommended main entry | Notes |
 |------|------------|------|
-| **Feature delivery** | `cs-feat` | End-to-end design → design review → user gate → long-range goal run of implementation → `cs-code-review` → QA → acceptance |
+| **Feature delivery** | `cs-feat` | Risk-based lanes: Quick implements/tests/reviews directly; Standard stays in the current run with design/implementation/review/inline acceptance; Goal alone creates a long-range goal package with QA/acceptance |
 | **Epic delivery** | `cs-epic` | Plan a large demand, review it, design child features, prepare a goal package, then dispatch a visible goal driver (print `/goal` as fallback) |
 | **Goal achievement** | `cs-goal` | Bounded start/end → interview/grill + start report → autonomous implement/validate/iterate → subagent functional acceptance |
 | **Issue fixing** | `cs-issue` | End-to-end report → analyze → fix → `cs-code-review` |
@@ -184,7 +184,7 @@ CodeStable models real coding work as a set of **entities** and **flows**.
 | Epic | `cs-epic` | Large demand planning, review, child feature design, and goal package |
 | Brainstorm | `cs-brainstorm` | Triage fuzzy ideas into feature, epic, or brainstorm notes |
 | Goal | `cs-goal` | Autonomous iteration from a bounded start state to acceptance |
-| Feature | `cs-feat` | End-to-end feature workflow |
+| Feature | `cs-feat` | Quick / Standard / Goal feature workflow; Goal is opt-in for long-range execution |
 | Issue | `cs-issue` | End-to-end issue workflow |
 | Refactor | `cs-refactor` | Behavior-preserving refactor workflow |
 | Review | `cs-code-review` | Cross-cutting read-only implementation review gate |
@@ -230,7 +230,7 @@ cs
 How to read it:
 
 - `cs` classifies the intake mode before the target. Action requests dispatch to the target skill in the current run; advice requests only recommend. It never routes users to deprecated stage skills.
-- `cs-feat`, `cs-issue`, and `cs-refactor` resume from repository facts. `cs-issue` and `cs-refactor` stop at review, blocking, or user-confirmation checkpoints; `cs-feat` stops only at the design gate, then runs impl, review, QA, and accept long-range via a visible goal driver.
+- `cs-feat`, `cs-issue`, and `cs-refactor` resume from repository facts. `cs-feat` first selects Quick, Standard, or Goal from task risk: Quick stays minimal, Standard completes in the current run with inline acceptance, and only Goal uses a long-range driver plus standalone QA. `cs-issue` and `cs-refactor` stop at their review, blocking, or user-confirmation checkpoints.
 - `cs-epic` prepares planning and goal packages, then dispatches a visible goal driver; v1 still writes `.codestable/roadmap/`.
 - `cs-code-review` is the cross-cutting gate; `cs-docs-neat` handles hygiene; `cs-docs` writes outward docs.
 - `cs-feedback` explicitly captures a local-private current-session evidence package; public issue upload remains separately confirmed.
