@@ -17,8 +17,10 @@ Commands to re-run: <去重命令列表>
 - items.yaml
 - goal-plan.md
 - goal-state.yaml
+- approval-report.md 的 `goal-acceptance` / `goal-commits` 命名决策
 - goal-features/*.md
-- 每个 feature 的 design / checklist / review / QA / acceptance / evidence pack / gate results
+- 非 dropped roadmap items 与 goal-state accepted features 的一一对应关系
+- 每个 feature canonical 目录内的 design / checklist / review / QA / acceptance / evidence pack / gate results
 - 每个 evidence pack 的 provider signals、Residual Risks、E/C/H 相关记录
 
 ## 2. 核验
@@ -31,21 +33,37 @@ python3 <cs-onboard skill 目录>/tools/codestable-goal-consistency-gate.py --ro
 
 失败时不得打印完成标记；按 blocking 项补齐证据或回退状态后重跑。
 
-必须确认：
+```haskell
+data AuditOutcome = AuditComplete | RepairAudit | AuditHandoff GoalHandoffReason
 
-- 每个 roadmap item 都是 `done`，或有理由 `dropped`。
-- 每个 feature acceptance `doc_type=feature-acceptance` 且 `status=passed`。
-- 每个 review `status=passed`，没有 unresolved blocking。
-- 每个 QA `status=passed`，没有 unresolved failed / blocked。
-- checklist steps 全 `done`，checks 全 `passed`。
-- residual risk 没有隐藏核心验收缺口。
-- provider unavailable 有 fallback reason，provider warning 已被 review / QA / audit 解释。
-- 核心完成判断不能只靠 H-only evidence；H-only core checks 非空时必须 handoff 或记录用户显式接受。
-- architecture / requirement / roadmap 回写已处理或明确不适用。
+auditPassed :: AuditEvidence -> Bool
+auditPassed a = and
+  [ allItemsTerminal a             -- done | dropped(reason)
+  , roadmapFeatureBijection a      -- item feature 指针与 accepted feature 无缺失、额外或重复
+  , canonicalFeatureEvidence a     -- 路径、doc_type、feature identity 均归属当前 feature
+  , goalAuthorizationsValid a      -- 同 roadmap canonical approval-report 的两份命名授权
+  , allFeatureArtifactsPassed a    -- review + QA + acceptance
+  , allChecklistPassed a           -- steps done + checks passed
+  , noCoreResidualRisk a
+  , providerRisksExplained a
+  , noUnapprovedHOnlyCoreCheck a
+  , writebacksCompleteOrNA a
+  , consistencyGatePassed a
+  ]
+
+auditOutcome :: AuditEvidence -> AuditOutcome
+auditOutcome a
+  | auditPassed a                        = AuditComplete
+  | not (noUnapprovedHOnlyCoreCheck a)   = AuditHandoff UnapprovedHOnlyCoreCheck
+  | coreEnvironmentMissing a             = AuditHandoff CoreEvidenceUnavailable
+  | corePathUnverified a                 = AuditHandoff CorePathUnverified
+  | sameAuditFailureCount a >= 3         = AuditHandoff RepeatedFailure
+  | otherwise                            = RepairAudit
+```
 
 ## 3. 最终聚合命令
 
-按 goal-plan 执行 final aggregate commands。功能性核心命令不能因耗时跳过。外部网络、凭证、设备不可用时，判断是否属于核心验收路径；核心不可验证则 blocked。
+按 goal-plan 执行 final aggregate commands。功能性核心命令不能因耗时跳过。外部网络、凭证、设备不可用时，判断是否属于核心验收路径；核心不可验证则 `AuditHandoff CoreEvidenceUnavailable`。
 
 非功能性 roadmap 可用静态 / 一致性 / schema / 文档校验替代，但必须写明理由。
 

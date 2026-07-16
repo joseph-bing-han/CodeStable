@@ -16,13 +16,34 @@ if os.environ.get("PYTHONDONTWRITEBYTECODE") != "1":
     os.execvpe(sys.executable, [sys.executable, *sys.argv], os.environ)
 sys.dont_write_bytecode = True
 
-from codestable_gate_common import load_yaml, load_yaml_text
+from codestable_gate_common import (
+    load_yaml,
+    load_yaml_text,
+    named_approval_group_state,
+    named_authorization_state,
+)
 from codestable_common import SUBAGENT_REVIEWERS, review_has_subagent_evidence
 
 
-NON_BLOCKING_STATUSES = {"continue", "user_gate", "goal_package", "dispatch_goal", "report_driver", "complete"}
+NON_BLOCKING_STATUSES = {
+    "continue",
+    "awaiting",
+    "handoff",
+    "user_gate",
+    "goal_package",
+    "dispatch_goal",
+    "complete",
+}
 REVIEW_FALLBACK_REVIEWERS = {"ocr", "self"}
 VALID_EXECUTION_LANES = {"quick", "standard", "goal"}
+VALID_INDEPENDENT_REVIEW_STATES = {
+    "passed",
+    "changes-requested",
+    "awaiting-reviewer",
+    "needs-owner-approval",
+    "reviewer-failed",
+    "blocked",
+}
 
 
 class ArtifactParseError(Exception):
@@ -109,6 +130,50 @@ def status_of(path: Path | None) -> str:
     return str(frontmatter(path).get("status", "missing"))
 
 
+def independent_review_state(path: Path | None, label: str) -> tuple[str, str, str]:
+    if path is None:
+        return "missing", "", ""
+
+    meta = frontmatter(path)
+    status = str(meta.get("status") or "missing").strip().lower()
+    state = str(meta.get("review_state") or "").strip().lower()
+    reason = str(meta.get("review_reason") or "").strip()
+    reviewer_id = str(meta.get("reviewer_id") or "").strip()
+
+    if state:
+        if state not in VALID_INDEPENDENT_REVIEW_STATES:
+            return "invalid", f"unknown review_state: {state}", reviewer_id
+        expected_status = {
+            "passed": "passed",
+            "changes-requested": "changes-requested",
+        }.get(state, "blocked")
+        if status != expected_status:
+            return "invalid", f"review_state {state} requires status: {expected_status}", reviewer_id
+        if state == "awaiting-reviewer" and not reviewer_id:
+            return "invalid", "awaiting-reviewer requires reviewer_id", ""
+        if state in {"needs-owner-approval", "reviewer-failed", "blocked"} and not reason:
+            return "invalid", f"{state} requires review_reason", reviewer_id
+        return state, reason, reviewer_id
+
+    if status == "passed":
+        return "passed", "", reviewer_id
+    if status in {"changes-requested", "blocking"}:
+        return "changes-requested", "", reviewer_id
+    if status == "blocked":
+        return "legacy-blocked", "legacy blocked review lacks review_state", reviewer_id
+    if status == "missing":
+        return "missing", "", reviewer_id
+    return "invalid", f"unknown {label} status: {status}", reviewer_id
+
+
+def roadmap_review_state(path: Path | None) -> tuple[str, str, str]:
+    return independent_review_state(path, "roadmap review")
+
+
+def feature_design_review_state(path: Path | None) -> tuple[str, str, str]:
+    return independent_review_state(path, "feature design-review")
+
+
 def review_gate_passed(path: Path | None, meta: dict[str, Any]) -> bool:
     if path is None:
         return False
@@ -116,6 +181,15 @@ def review_gate_passed(path: Path | None, meta: dict[str, Any]) -> bool:
     if reviewer in SUBAGENT_REVIEWERS and review_has_subagent_evidence(path):
         return True
     return os.environ.get("CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK") == "1" and reviewer in REVIEW_FALLBACK_REVIEWERS
+
+
+def authorization_state(
+    unit: Path,
+    state: dict[str, Any],
+    field: str,
+    decision_id: str,
+) -> tuple[str, str, str]:
+    return named_authorization_state(unit, state, field, decision_id, frontmatter)
 
 
 def feature_slug_from_dir(feature: Path) -> str:
@@ -833,17 +907,136 @@ def roadmap_goal_owner(
 
 
 def item_evidence(root: Path, item: dict[str, Any], feature: Path | None, artifacts: dict[str, Path | None]) -> dict[str, Any]:
+    dependencies, _ = roadmap_item_dependencies(item)
+    review_state, review_reason, _ = feature_design_review_state(artifacts.get("design_review"))
     return {
         "item": item.get("slug"),
         "item_status": item.get("status"),
         "item_feature": item.get("feature"),
+        "depends_on": dependencies,
         "feature_dir": rel(root, feature) if feature else None,
         "design": rel(root, artifacts.get("design")),
         "design_status": status_of(artifacts.get("design")),
         "checklist": rel(root, artifacts.get("checklist")),
         "design_review": rel(root, artifacts.get("design_review")),
         "design_review_status": status_of(artifacts.get("design_review")),
+        "design_review_state": review_state,
+        "design_review_reason": review_reason or None,
     }
+
+
+def roadmap_item_dependencies(item: dict[str, Any]) -> tuple[list[str], str | None]:
+    raw = item.get("depends_on")
+    if raw is None:
+        return [], None
+    if not isinstance(raw, list) or any(not isinstance(value, str) or not value.strip() for value in raw):
+        return [], "depends_on must be a list of non-empty roadmap item slugs"
+    dependencies = [value.strip() for value in raw]
+    if len(dependencies) != len(set(dependencies)):
+        return [], "depends_on must not contain duplicate roadmap item slugs"
+    return dependencies, None
+
+
+def validate_roadmap_dependency_graph(
+    items: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]], list[str], dict[str, Any] | None]:
+    items_by_slug: dict[str, dict[str, Any]] = {}
+    dependencies_by_slug: dict[str, list[str]] = {}
+    for item in items:
+        item_slug = str(item.get("slug") or "").strip()
+        if not item_slug:
+            continue
+        if item_slug in items_by_slug:
+            return {}, {}, [], {"reason": f"duplicate roadmap item slug: {item_slug}", "item": item_slug}
+        dependencies, dependency_error = roadmap_item_dependencies(item)
+        if dependency_error:
+            return {}, {}, [], {
+                "reason": f"invalid dependencies for roadmap item {item_slug}: {dependency_error}",
+                "item": item_slug,
+            }
+        items_by_slug[item_slug] = item
+        dependencies_by_slug[item_slug] = dependencies
+
+    for item_slug, dependencies in dependencies_by_slug.items():
+        for dependency_slug in dependencies:
+            if dependency_slug not in items_by_slug:
+                return {}, {}, [], {
+                    "reason": f"roadmap item {item_slug} depends on missing item {dependency_slug}",
+                    "item": item_slug,
+                    "dependency": dependency_slug,
+                }
+
+    incoming = {slug: len(dependencies) for slug, dependencies in dependencies_by_slug.items()}
+    dependents = {slug: [] for slug in items_by_slug}
+    for item_slug, dependencies in dependencies_by_slug.items():
+        for dependency_slug in dependencies:
+            dependents[dependency_slug].append(item_slug)
+    ready = [slug for slug in items_by_slug if incoming[slug] == 0]
+    topological_order: list[str] = []
+    while ready:
+        slug = ready.pop(0)
+        topological_order.append(slug)
+        for dependent_slug in dependents[slug]:
+            incoming[dependent_slug] -= 1
+            if incoming[dependent_slug] == 0:
+                ready.append(dependent_slug)
+    if len(topological_order) != len(items_by_slug):
+        cycle_items = [slug for slug in items_by_slug if incoming[slug] > 0]
+        return {}, {}, [], {"reason": "roadmap dependencies contain a cycle", "cycle_items": cycle_items}
+    return items_by_slug, dependencies_by_slug, topological_order, None
+
+
+def dependency_design_evidence(
+    root: Path,
+    roadmap_slug: str,
+    dependency: dict[str, Any],
+) -> dict[str, Any]:
+    dependency_slug = str(dependency.get("slug") or "")
+    dependency_status = str(dependency.get("status") or "")
+    if dependency_status in {"done", "dropped"}:
+        return {
+            "item": dependency_slug,
+            "item_status": dependency_status,
+            "design_review_status": None,
+            "design_ready": True,
+            "ready_by": dependency_status,
+        }
+    feature = find_feature_dir(root, roadmap_slug, dependency)
+    artifacts = feature_artifacts(feature, dependency_slug) if feature else {"design_review": None}
+    review_state, review_reason, _ = feature_design_review_state(artifacts.get("design_review"))
+    return {
+        "item": dependency_slug,
+        "item_status": dependency_status,
+        "design_review_status": review_state,
+        "design_ready": review_state == "passed",
+        "ready_by": "design-review" if review_state == "passed" else None,
+        "reason": review_reason or None,
+    }
+
+
+def implementation_dependency_evidence(
+    root: Path,
+    roadmap: Path,
+    roadmap_item: str,
+) -> tuple[list[dict[str, Any]], str | None]:
+    items_path = find_items_file(roadmap)
+    if items_path is None:
+        return [], f"roadmap items are missing: {rel(root, roadmap)}"
+    items = load_items(items_path)
+    items_by_slug, dependencies_by_slug, _, graph_error = validate_roadmap_dependency_graph(items)
+    if graph_error:
+        return [], str(graph_error["reason"])
+    if roadmap_item not in items_by_slug:
+        return [], f"roadmap item is missing: {roadmap_item}"
+    evidence = [
+        {
+            "item": dependency_slug,
+            "status": items_by_slug[dependency_slug].get("status"),
+            "implementation_ready": items_by_slug[dependency_slug].get("status") == "done",
+        }
+        for dependency_slug in dependencies_by_slug[roadmap_item]
+    ]
+    return evidence, None
 
 
 def _epic_next(roadmap: Path) -> dict[str, Any]:
@@ -874,7 +1067,15 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
 
     roadmap_status = status_of(roadmap_file)
     review_status = status_of(review_file)
-    if roadmap_status == "active" and review_status == "missing":
+    review_state, review_reason, reviewer_id = roadmap_review_state(review_file)
+    review_evidence = {
+        "roadmap_review": rel(root, review_file),
+        "roadmap_review_status": review_status,
+        "roadmap_review_state": review_state,
+        "review_reason": review_reason or None,
+        "reviewer_id": reviewer_id or None,
+    }
+    if roadmap_status == "active" and review_state == "missing":
         return decision(
             workflow="epic",
             status="blocked",
@@ -884,26 +1085,69 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
             evidence={
                 "roadmap": rel(root, roadmap_file),
                 "roadmap_status": roadmap_status,
-                "roadmap_review": rel(root, review_file),
-                "roadmap_review_status": review_status,
+                **review_evidence,
             },
         )
-    if review_status != "passed":
-        if review_status in {"blocking", "blocked", "changes-requested"}:
-            return decision(
-                workflow="epic",
-                status="continue",
-                next_action="cs-epic planning/update then review",
-                reason=f"roadmap review is {review_status}",
-                evidence={"roadmap_review": rel(root, review_file), "roadmap_review_status": review_status},
-            )
+    if review_state == "invalid":
+        return decision(
+            workflow="epic",
+            status="blocked",
+            next_action="fix-roadmap-review-state",
+            reason=review_reason,
+            blocking=[review_reason],
+            evidence=review_evidence,
+        )
+    if review_state == "legacy-blocked":
+        return decision(
+            workflow="epic",
+            status="blocked",
+            next_action="rerun-cs-epic-review-to-migrate-state",
+            reason=review_reason,
+            blocking=["legacy blocked roadmap review cannot be resumed safely"],
+            evidence=review_evidence,
+        )
+    if review_state == "changes-requested":
+        return decision(
+            workflow="epic",
+            status="continue",
+            next_action="cs-epic planning/update then review",
+            reason="roadmap review requested changes",
+            evidence=review_evidence,
+        )
+    if review_state == "awaiting-reviewer":
+        return decision(
+            workflow="epic",
+            status="awaiting",
+            next_action="wait-roadmap-reviewer",
+            reason="roadmap reviewer is still running",
+            evidence=review_evidence,
+        )
+    if review_state == "needs-owner-approval":
+        return decision(
+            workflow="epic",
+            status="user_gate",
+            next_action="resolve-roadmap-review-approval",
+            reason=review_reason,
+            evidence=review_evidence,
+        )
+    if review_state in {"reviewer-failed", "blocked"}:
+        next_action = "retry-roadmap-reviewer" if review_state == "reviewer-failed" else "resolve-roadmap-review-block"
+        return decision(
+            workflow="epic",
+            status="blocked",
+            next_action=next_action,
+            reason=review_reason,
+            blocking=[review_reason],
+            evidence=review_evidence,
+        )
+    if review_state != "passed":
         return decision(
             workflow="epic",
             status="continue",
             next_action="cs-epic review",
             reason="roadmap review has not passed",
             missing_artifacts=[] if review_file else [rel(root, roadmap / f"{roadmap.name}-roadmap-review.md") or ""],
-            evidence={"roadmap_review": rel(root, review_file), "roadmap_review_status": review_status},
+            evidence=review_evidence,
         )
 
     if roadmap_status != "active":
@@ -926,16 +1170,44 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
             missing_artifacts=[] if items_path else [rel(root, roadmap / f"{roadmap.name}-items.yaml") or ""],
         )
 
+    items_by_slug, dependencies_by_slug, topological_order, graph_error = validate_roadmap_dependency_graph(items)
+    if graph_error:
+        return decision(
+            workflow="epic",
+            status="blocked",
+            next_action="fix-roadmap-items",
+            reason=str(graph_error["reason"]),
+            blocking=[f"repair roadmap dependency graph in {rel(root, items_path)}"],
+            evidence={"roadmap": rel(root, roadmap), "items": rel(root, items_path), **graph_error},
+        )
+
     completed: list[dict[str, Any]] = []
     warnings: list[str] = []
     for item in items:
-        item_slug = str(item.get("slug") or "")
+        item_slug = str(item.get("slug") or "").strip()
         if not item_slug:
             warnings.append("roadmap item without slug ignored")
             continue
         if item.get("status") == "dropped":
             completed.append({"item": item_slug, "status": "dropped"})
             continue
+        if item.get("status") == "done":
+            completed.append({"item": item_slug, "status": "done"})
+            continue
+        dependencies = dependencies_by_slug[item_slug]
+        dependency_evidence: list[dict[str, Any]] = []
+        for dependency_slug in dependencies:
+            dependency = items_by_slug[dependency_slug]
+            try:
+                dependency_evidence.append(dependency_design_evidence(root, roadmap.name, dependency))
+            except FeatureLookupError as exc:
+                return decision(
+                    workflow="epic",
+                    status="blocked",
+                    next_action="fix-roadmap-items",
+                    reason=str(exc),
+                    blocking=[f"resolve ambiguous dependency ownership in {rel(root, items_path)}"],
+                )
         try:
             feature = find_feature_dir(root, roadmap.name, item)
         except FeatureLookupError as exc:
@@ -953,8 +1225,11 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
             for label in ("design", "checklist", "design_review")
             if artifacts.get(label) is None
         ]
-        review_status = status_of(artifacts.get("design_review"))
-        if missing or review_status != "passed":
+        review_state, review_reason, _ = feature_design_review_state(artifacts.get("design_review"))
+        if missing or review_state != "passed":
+            unready_dependencies = [dependency for dependency in dependency_evidence if not dependency["design_ready"]]
+            if unready_dependencies:
+                continue
             return decision(
                 workflow="epic",
                 status="continue",
@@ -966,12 +1241,50 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
                     "roadmap": rel(root, roadmap),
                     "items": rel(root, items_path),
                     "next_item": item_evidence(root, item, feature, artifacts),
+                    "design_admission": {
+                        "dependencies": dependency_evidence,
+                        "ready": True,
+                        "review_state": review_state,
+                        "review_reason": review_reason or None,
+                    },
                     "completed_items": completed,
                 },
             )
         completed.append(item_evidence(root, item, feature, artifacts))
 
-    unapproved = [item for item in completed if item.get("status") != "dropped" and item.get("design_status") != "approved"]
+    dropped_dependency_blockers = [
+        {
+            "item": item_slug,
+            "dropped_dependencies": [
+                dependency_slug
+                for dependency_slug in dependencies_by_slug[item_slug]
+                if items_by_slug[dependency_slug].get("status") == "dropped"
+            ],
+        }
+        for item_slug in topological_order
+        if items_by_slug[item_slug].get("status") != "dropped"
+    ]
+    dropped_dependency_blockers = [item for item in dropped_dependency_blockers if item["dropped_dependencies"]]
+    if dropped_dependency_blockers:
+        return decision(
+            workflow="epic",
+            status="blocked",
+            next_action="resolve-dropped-implementation-dependencies",
+            reason="reviewed child designs still depend on dropped roadmap items",
+            blocking=["remove or replace each dropped dependency, or drop the dependent item before goal packaging"],
+            evidence={
+                "roadmap": rel(root, roadmap),
+                "items": rel(root, items_path),
+                "dependency_blockers": dropped_dependency_blockers,
+                "topological_order": topological_order,
+            },
+        )
+
+    unapproved = [
+        item
+        for item in completed
+        if item.get("status") not in {"done", "dropped"} and item.get("design_status") != "approved"
+    ]
     if unapproved:
         return decision(
             workflow="epic",
@@ -979,7 +1292,12 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
             next_action="all-feature-designs-confirmation",
             reason="all child design reviews passed, but designs are not batch-approved",
             warnings=warnings,
-            evidence={"roadmap": rel(root, roadmap), "items": rel(root, items_path), "unapproved_items": unapproved},
+            evidence={
+                "roadmap": rel(root, roadmap),
+                "items": rel(root, items_path),
+                "unapproved_items": unapproved,
+                "topological_order": topological_order,
+            },
         )
 
     if not goal_state.exists():
@@ -990,25 +1308,21 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
             reason="all child designs are approved and the epic goal package is missing",
             warnings=warnings,
             missing_artifacts=[rel(root, goal_state) or "goal-state.yaml"],
-            evidence={"roadmap": rel(root, roadmap), "items": rel(root, items_path), "completed_items": completed},
+            evidence={
+                "roadmap": rel(root, roadmap),
+                "items": rel(root, items_path),
+                "completed_items": completed,
+                "topological_order": topological_order,
+            },
         )
 
     state = load_yaml_artifact(goal_state)
     state = state if isinstance(state, dict) else {}
     state_status = state.get("status")
-    if state_status in {"complete", "completed"}:
-        return decision(
-            workflow="epic",
-            status="complete",
-            next_action="CS_ROADMAP_GOAL_COMPLETE",
-            reason="epic goal state is complete",
-            warnings=warnings,
-            evidence={"goal_state": rel(root, goal_state)},
-        )
     if state_status == "handoff":
         return decision(
             workflow="epic",
-            status="user_gate",
+            status="handoff",
             next_action="CS_ROADMAP_GOAL_HANDOFF",
             reason=str(state.get("handoff_reason") or "epic goal driver requested handoff"),
             warnings=warnings,
@@ -1017,25 +1331,178 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
                 "handoff_next": state.get("handoff_next"),
             },
         )
-    driver_kind = state.get("driver_kind")
-    driver_id = state.get("driver_id")
-    if driver_kind in {"paseo", "native"} and driver_id:
+    (
+        acceptance_authorization,
+        acceptance_authorization_ref,
+        acceptance_authorization_reason,
+    ) = authorization_state(roadmap, state, "acceptance_authorization", "goal-acceptance")
+    (
+        commit_authorization,
+        commit_authorization_ref,
+        commit_authorization_reason,
+    ) = authorization_state(roadmap, state, "commit_authorization", "goal-commits")
+    (
+        execution_confirmation,
+        execution_confirmation_id,
+        execution_confirmation_reason,
+    ) = named_approval_group_state(
+        roadmap,
+        "goal-execution",
+        ("goal-acceptance", "goal-commits"),
+        frontmatter,
+    )
+    if execution_confirmation == "rejected":
         return decision(
             workflow="epic",
-            status="report_driver",
+            status="handoff",
+            next_action="CS_ROADMAP_GOAL_HANDOFF",
+            reason=execution_confirmation_reason,
+            warnings=warnings,
+            evidence={"goal_state": rel(root, goal_state)},
+        )
+
+    state_confirmation_id = str(state.get("execution_confirmation_id") or "").strip()
+    if execution_confirmation == "approved":
+        driver_kind = state.get("driver_kind")
+        driver_id = state.get("driver_id")
+        target_status = (
+            state_status
+            if driver_kind in {"host-agent", "paseo", "native"} and driver_id
+            else "ready-to-dispatch" if state_status == "awaiting-authorization" else state_status
+        )
+        repair_reasons = []
+        if state_confirmation_id != execution_confirmation_id:
+            repair_reasons.append("execution_confirmation_id is not synchronized")
+        if acceptance_authorization != "approved":
+            repair_reasons.append(
+                acceptance_authorization_reason
+                or f"acceptance_authorization projection is {acceptance_authorization}"
+            )
+        if commit_authorization != "approved":
+            repair_reasons.append(
+                commit_authorization_reason
+                or f"commit_authorization projection is {commit_authorization}"
+            )
+        if target_status != state_status:
+            repair_reasons.append("goal-state status still awaits authorization")
+        if repair_reasons:
+            return decision(
+                workflow="epic",
+                status="continue",
+                next_action="repair-epic-goal-execution-authorization",
+                reason="; ".join(repair_reasons),
+                warnings=warnings,
+                evidence={
+                    "goal_state": rel(root, goal_state),
+                    "execution_confirmation_id": execution_confirmation_id,
+                    "target_status": target_status,
+                    "acceptance_authorization": "approved",
+                    "acceptance_authorization_ref": "approval-report.md#goal-acceptance",
+                    "commit_authorization": "approved",
+                    "commit_authorization_ref": "approval-report.md#goal-commits",
+                },
+            )
+    else:
+        if acceptance_authorization == "rejected":
+            return decision(
+                workflow="epic",
+                status="handoff",
+                next_action="CS_ROADMAP_GOAL_HANDOFF",
+                reason="epic goal acceptance authorization was rejected",
+                warnings=warnings,
+                evidence={"goal_state": rel(root, goal_state)},
+            )
+        if commit_authorization == "rejected":
+            return decision(
+                workflow="epic",
+                status="handoff",
+                next_action="CS_ROADMAP_GOAL_HANDOFF",
+                reason="epic goal commit authorization was rejected",
+                warnings=warnings,
+                evidence={"goal_state": rel(root, goal_state)},
+            )
+        if (
+            execution_confirmation == "absent"
+            and acceptance_authorization == "approved"
+            and commit_authorization == "approved"
+            and "execution_confirmation_id" not in state
+            and state_status in {"ready-to-dispatch", "complete", "completed"}
+        ):
+            warnings = [
+                *warnings,
+                "legacy epic goal approvals have no goal-execution confirmation group",
+            ]
+        else:
+            authorization_reasons = [execution_confirmation_reason]
+            authorization_reasons.extend(
+                reason
+                for status, reason in (
+                    (acceptance_authorization, acceptance_authorization_reason),
+                    (commit_authorization, commit_authorization_reason),
+                )
+                if status != "approved"
+            )
+            return decision(
+                workflow="epic",
+                status="user_gate",
+                next_action="authorize-epic-goal-execution",
+                reason="; ".join(authorization_reasons),
+                warnings=warnings,
+                evidence={
+                    "goal_state": rel(root, goal_state),
+                    "execution_confirmation_id": execution_confirmation_id,
+                    "execution_confirmation_reason": execution_confirmation_reason,
+                    "acceptance_authorization_ref": acceptance_authorization_ref,
+                    "acceptance_authorization_reason": acceptance_authorization_reason,
+                    "commit_authorization_ref": commit_authorization_ref,
+                    "commit_authorization_reason": commit_authorization_reason,
+                },
+            )
+    if state_status in {"complete", "completed"}:
+        return decision(
+            workflow="epic",
+            status="complete",
+            next_action="CS_ROADMAP_GOAL_COMPLETE",
+            reason="epic goal state is complete",
+            warnings=warnings,
+            evidence={
+                "goal_state": rel(root, goal_state),
+                "execution_confirmation_id": execution_confirmation_id or state_confirmation_id,
+                "acceptance_authorization_ref": acceptance_authorization_ref,
+                "commit_authorization_ref": commit_authorization_ref,
+            },
+        )
+    driver_kind = state.get("driver_kind")
+    driver_id = state.get("driver_id")
+    if driver_kind in {"host-agent", "paseo", "native"} and driver_id:
+        return decision(
+            workflow="epic",
+            status="awaiting",
             next_action="report-visible-driver",
             reason="visible epic goal driver is already recorded",
             warnings=warnings,
-            evidence={"goal_state": rel(root, goal_state), "driver_kind": driver_kind, "driver_id": driver_id},
+            evidence={
+                "goal_state": rel(root, goal_state),
+                "driver_kind": driver_kind,
+                "driver_id": driver_id,
+                "execution_confirmation_id": execution_confirmation_id or state_confirmation_id,
+                "acceptance_authorization_ref": acceptance_authorization_ref,
+                "commit_authorization_ref": commit_authorization_ref,
+            },
         )
-    if state_status == "ready-to-dispatch":
+    if state_status in {"awaiting-authorization", "ready-to-dispatch"}:
         return decision(
             workflow="epic",
             status="dispatch_goal",
             next_action="dispatch-epic-goal-driver-or-print-goal",
             reason="epic goal package is ready to dispatch",
             warnings=warnings,
-            evidence={"goal_state": rel(root, goal_state)},
+            evidence={
+                "goal_state": rel(root, goal_state),
+                "execution_confirmation_id": execution_confirmation_id or state_confirmation_id,
+                "acceptance_authorization_ref": acceptance_authorization_ref,
+                "commit_authorization_ref": commit_authorization_ref,
+            },
         )
     return decision(
         workflow="epic",
@@ -1054,7 +1521,11 @@ def epic_next(roadmap: Path) -> dict[str, Any]:
         return artifact_parse_decision("epic", roadmap, error)
 
 
-def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
+def _feature_next(
+    feature: Path,
+    epic_child_batch: bool,
+    require_implementation_ready: bool,
+) -> dict[str, Any]:
     feature = feature.resolve()
     root = project_root(feature)
     if not feature.is_dir():
@@ -1083,6 +1554,9 @@ def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
     ff_note_meta = frontmatter(ff_note) if ff_note else {}
     design_status = str(design_meta.get("status") or "missing")
     design_review_status = str(design_review_meta.get("status") or "missing")
+    design_review_state, design_review_reason, design_reviewer_id = feature_design_review_state(
+        design_review
+    )
     code_review_status = str(code_review_meta.get("status") or "missing")
     qa_status = str(qa_meta.get("status") or "missing")
     acceptance_status = str(acceptance_meta.get("status") or "missing")
@@ -1130,6 +1604,9 @@ def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
         "checklist_steps_done": checklist_steps_done,
         "design_review": rel(root, design_review),
         "design_review_status": design_review_status,
+        "design_review_state": design_review_state,
+        "design_review_reason": design_review_reason or None,
+        "design_reviewer_id": design_reviewer_id or None,
         "code_review": rel(root, code_review),
         "code_review_status": code_review_status,
         "code_review_doc_type": code_review_meta.get("doc_type"),
@@ -1159,6 +1636,34 @@ def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
             blocking=[roadmap_owner_error],
             evidence=evidence,
         )
+    if require_implementation_ready:
+        if roadmap_owner is None:
+            return decision(
+                workflow="feature",
+                status="blocked",
+                next_action="fix-feature-roadmap-metadata",
+                reason="implementation dependency gate requires a unique roadmap owner",
+                blocking=["record roadmap and roadmap_item before checking implementation dependencies"],
+                evidence=evidence,
+            )
+        roadmap_path = root / str(roadmap_owner["roadmap"])
+        dependency_evidence, dependency_error = implementation_dependency_evidence(
+            root,
+            roadmap_path,
+            str(roadmap_owner["roadmap_item"]),
+        )
+        if dependency_error or any(not item["implementation_ready"] for item in dependency_evidence):
+            reason = dependency_error or "roadmap dependencies are not all done"
+            return decision(
+                workflow="feature",
+                status="blocked",
+                next_action="complete-roadmap-dependencies-before-implementation",
+                reason=reason,
+                blocking=[reason],
+                evidence={**evidence, **roadmap_owner, "implementation_dependencies": dependency_evidence},
+            )
+        evidence["implementation_dependencies"] = dependency_evidence
+        evidence["implementation_ready"] = True
     if goal_state is not None and roadmap_owner is not None:
         return decision(
             workflow="feature",
@@ -1221,24 +1726,72 @@ def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
             missing_artifacts=[f"{feature_slug_from_dir(feature)}-design.md"],
             evidence=evidence,
         )
-    if design_status == "approved" and design_review_status != "passed":
+    if design_review_state == "invalid":
+        return decision(
+            workflow="feature",
+            status="blocked",
+            next_action="fix-feature-design-review-state",
+            reason=design_review_reason,
+            blocking=[design_review_reason],
+            evidence=evidence,
+        )
+    if design_review_state == "legacy-blocked":
+        return decision(
+            workflow="feature",
+            status="blocked",
+            next_action="classify-feature-design-review-block",
+            reason=design_review_reason,
+            blocking=["legacy blocked design-review must classify reviewer failure, owner approval, or hard block"],
+            evidence=evidence,
+        )
+    if design_status == "approved" and design_review_state != "passed":
         return decision(
             workflow="feature",
             status="blocked",
             next_action="fix-feature-design-review-state",
             reason="approved design lacks a passed design-review",
-            blocking=[f"approved design has design-review status: {design_review_status}"],
+            blocking=[f"approved design has design-review state: {design_review_state}"],
             evidence=evidence,
         )
-    if design_review_status in {"changes-requested", "blocked"}:
+    if design_review_state == "changes-requested":
         return decision(
             workflow="feature",
             status="continue",
             next_action="cs-feat design",
-            reason=f"design-review is {design_review_status}",
+            reason="design-review requested changes",
             evidence=evidence,
         )
-    if design_status == "draft" and design_review_status != "passed":
+    if design_review_state == "awaiting-reviewer":
+        return decision(
+            workflow="feature",
+            status="awaiting",
+            next_action="resume-feature-design-reviewer",
+            reason="feature design-reviewer is still running",
+            evidence=evidence,
+        )
+    if design_review_state == "needs-owner-approval":
+        return decision(
+            workflow="feature",
+            status="user_gate",
+            next_action="approve-feature-design-review-fallback",
+            reason=design_review_reason,
+            evidence=evidence,
+        )
+    if design_review_state in {"reviewer-failed", "blocked"}:
+        next_action = (
+            "retry-feature-design-reviewer"
+            if design_review_state == "reviewer-failed"
+            else "resolve-feature-design-review-block"
+        )
+        return decision(
+            workflow="feature",
+            status="blocked",
+            next_action=next_action,
+            reason=design_review_reason,
+            blocking=[design_review_reason],
+            evidence=evidence,
+        )
+    if design_status == "draft" and design_review_state == "missing":
         return decision(
             workflow="feature",
             status="continue",
@@ -1247,7 +1800,7 @@ def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
             missing_artifacts=[] if design_review else [f"{feature_slug_from_dir(feature)}-design-review.md"],
             evidence=evidence,
         )
-    if design_review_status == "passed" and epic_child_batch:
+    if design_review_state == "passed" and epic_child_batch:
         roadmap_slug = design_meta.get("roadmap")
         roadmap_item = design_meta.get("roadmap_item")
         if not roadmap_slug or not roadmap_item:
@@ -1286,7 +1839,7 @@ def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
             reason="feature is owned by an existing roadmap goal-state",
             evidence={**evidence, **roadmap_owner},
         )
-    if design_review_status == "passed" and design_status != "approved":
+    if design_review_state == "passed" and design_status != "approved":
         return decision(
             workflow="feature",
             status="user_gate",
@@ -1321,6 +1874,40 @@ def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
     state = state if isinstance(state, dict) else {}
     stage = state.get("stage")
     status = state.get("status")
+    if (stage, status) == ("handoff", "blocked"):
+        return decision(
+            workflow="feature",
+            status="handoff",
+            next_action="CS_FEATURE_GOAL_HANDOFF",
+            reason=str(state.get("handoff_reason") or "feature goal driver requested handoff"),
+            evidence={**evidence, "handoff_next": state.get("handoff_next")},
+        )
+    (
+        acceptance_authorization,
+        acceptance_authorization_ref,
+        acceptance_authorization_reason,
+    ) = authorization_state(feature, state, "acceptance_authorization", "goal-acceptance")
+    if acceptance_authorization == "rejected":
+        return decision(
+            workflow="feature",
+            status="handoff",
+            next_action="CS_FEATURE_GOAL_HANDOFF",
+            reason="feature goal acceptance authorization was rejected",
+            evidence=evidence,
+        )
+    if acceptance_authorization != "approved":
+        return decision(
+            workflow="feature",
+            status="user_gate",
+            next_action="authorize-feature-goal-acceptance",
+            reason=acceptance_authorization_reason,
+            evidence={
+                **evidence,
+                "acceptance_authorization_ref": acceptance_authorization_ref,
+                "acceptance_authorization_reason": acceptance_authorization_reason,
+            },
+        )
+    evidence["acceptance_authorization_ref"] = acceptance_authorization_ref
     if (stage, status) == ("complete", "passed"):
         return decision(
             workflow="feature",
@@ -1329,20 +1916,12 @@ def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
             reason="feature goal-state stage=complete status=passed",
             evidence=evidence,
         )
-    if (stage, status) == ("handoff", "blocked"):
-        return decision(
-            workflow="feature",
-            status="user_gate",
-            next_action="CS_FEATURE_GOAL_HANDOFF",
-            reason=str(state.get("handoff_reason") or "feature goal driver requested handoff"),
-            evidence={**evidence, "handoff_next": state.get("handoff_next")},
-        )
     driver_kind = state.get("driver_kind")
     driver_id = state.get("driver_id")
-    if driver_kind in {"paseo", "native"} and driver_id:
+    if driver_kind in {"host-agent", "paseo", "native"} and driver_id:
         return decision(
             workflow="feature",
-            status="report_driver",
+            status="awaiting",
             next_action="report-visible-driver",
             reason="visible feature goal driver is already recorded",
             evidence={**evidence, "driver_kind": driver_kind, "driver_id": driver_id},
@@ -1375,9 +1954,13 @@ def _feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
     )
 
 
-def feature_next(feature: Path, epic_child_batch: bool) -> dict[str, Any]:
+def feature_next(
+    feature: Path,
+    epic_child_batch: bool,
+    require_implementation_ready: bool = False,
+) -> dict[str, Any]:
     try:
-        return _feature_next(feature, epic_child_batch)
+        return _feature_next(feature, epic_child_batch, require_implementation_ready)
     except ArtifactParseError as error:
         return artifact_parse_decision("feature", feature, error)
 
@@ -1401,13 +1984,22 @@ def main() -> int:
     feature_parser = subparsers.add_parser("feature", help="Resolve next action for a feature")
     feature_parser.add_argument("--feature", required=True, help="Feature directory, e.g. .codestable/features/YYYY-MM-DD-foo")
     feature_parser.add_argument("--epic-child-batch", action="store_true", help="Use cs-epic child design batch semantics")
+    feature_parser.add_argument(
+        "--require-implementation-ready",
+        action="store_true",
+        help="Block unless every roadmap dependency is done",
+    )
     feature_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
 
     args = parser.parse_args()
     if args.command == "epic":
         result = epic_next(Path(args.roadmap))
     else:
-        result = feature_next(Path(args.feature), args.epic_child_batch)
+        result = feature_next(
+            Path(args.feature),
+            args.epic_child_batch,
+            args.require_implementation_ready,
+        )
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -1,14 +1,63 @@
 # Epic Goal Package Protocol
 
-## 目标
+## Spec
 
-把一个大需求变成可审阅、可恢复、可自动推进的 CodeStable roadmap 执行包：
+```haskell
+data ChildReviewState
+  = ChildReviewsMissing | ChildReviewsPassed
+  | ChildReviewsAwaiting AgentRef | ChildReviewsNeedOwnerApproval Reason
+  | ChildReviewerFailed Reason | ChildReviewsBlocked Reason
+data GoalExecutionConfirmation = GroupMissing | GroupPending | GroupApproved ConfirmationId | GroupRejected | StrictLegacy104
+data PackageState = PackageState
+  { roadmapReviewState :: RoadmapReviewState, roadmapConfirmed :: Bool
+  , childReviewState :: ChildReviewState, childDesignsConfirmed :: Bool
+  , goalExecutionConfirmation :: GoalExecutionConfirmation
+  , stateExecutionConfirmationId :: Maybe ConfirmationId
+  , acceptanceAuthorization :: AuthorizationState, commitAuthorization :: AuthorizationState
+  , packagePersisted :: Bool, baselineTracked :: Bool }
+data AuthorizationState = AuthorizationMissing | AuthorizationApproved ApprovalRef | AuthorizationRejected
+data PackageOutcome
+  = Route Stage | Awaiting WaitReason | HumanCheckpoint CheckpointReason
+  | WriteGoalPackage | RepairGoalExecutionAuthorization WorkflowEvidence | DispatchGoalDriver Command | GoalHandoff Command
+  | Blocked Reason
 
-1. 先按 `cs-epic` planning 阶段规范澄清需求并创建 / 更新一份 roadmap，运行 `cs-epic` review 阶段并处理到通过。
-2. 用户确认 roadmap 后，为 roadmap items 里的每个子 feature 进入 `cs-feat` design 阶段，并带内部上下文 `epic_child_batch: true`；生成 design + checklist，运行 `cs-feat` design-review 阶段并处理到通过。
-3. 用户确认所有 feature design 后，输出一条可直接粘贴的 `/goal` 指令，并优先尝试用可见 Task agent goal driver 派发。
-4. `/goal` 会话按顺序循环执行每个 feature：`cs-feat` implementation 阶段 → `cs-code-review` → 必要时 review-fix → `cs-feat` QA 阶段 → 必要时 qa-fix 后重跑 review/QA → `cs-feat` acceptance 阶段 → 更新状态 → 下一个 feature。
-5. 全部 feature 验收后，做整个 roadmap 的最终审计；只有审计通过才打印完成标记。
+buildEpicGoal :: PackageState -> AgentEnv -> PackageOutcome
+buildEpicGoal s env
+  | roadmapReviewState s == ReviewMissing                         = Route Review
+  | roadmapReviewState s == ReviewChangesRequested                = Route Planning
+  | roadmapReviewState s is ReviewAwaiting agent                  = Awaiting (RoadmapReviewerRunning agent)
+  | roadmapReviewState s is ReviewNeedsOwnerApproval reason       = HumanCheckpoint (ApproveReviewFallback reason)
+  | roadmapReviewState s is ReviewerFailed reason                 = Blocked reason
+  | roadmapReviewState s is ReviewBlocked reason                  = Blocked reason
+  | not (roadmapConfirmed s)                                      = HumanCheckpoint ConfirmRoadmap
+  | childReviewState s == ChildReviewsMissing                     = Route ChildDesignBatch
+  | childReviewState s is ChildReviewsAwaiting agent              = Awaiting (RoadmapReviewerRunning agent)
+  | childReviewState s is ChildReviewsNeedOwnerApproval reason    = HumanCheckpoint (ApproveReviewFallback reason)
+  | childReviewState s is ChildReviewerFailed reason              = Blocked reason
+  | childReviewState s is ChildReviewsBlocked reason              = Blocked reason
+  | not (childDesignsConfirmed s)                                 = HumanCheckpoint ConfirmAllChildDesign
+  | goalExecutionConfirmation s == GroupRejected                  = GoalHandoff "goal execution authorization rejected"
+  | goalExecutionConfirmation s is GroupApproved id && nonEmpty id && not (goalExecutionAuthorizationReady s) = RepairGoalExecutionAuthorization (goalProjectionRepairEvidence s id)
+  | acceptanceAuthorization s == AuthorizationRejected            = GoalHandoff "goal acceptance authorization rejected"
+  | commitAuthorization s == AuthorizationRejected                = GoalHandoff "goal commit authorization rejected"
+  | not (packagePersisted s)                                      = WriteGoalPackage
+  | not (goalExecutionAuthorizationReady s)                       = HumanCheckpoint (ConfirmGoalExecutionAuthorization (goalCommand s))
+  | otherwise                                                     = fromDriverDecision (selectGoalDriver s env)
+goalExecutionAuthorizationReady :: PackageState -> Bool
+goalExecutionAuthorizationReady s = case goalExecutionConfirmation s of
+  GroupApproved id -> nonEmpty id && stateExecutionConfirmationId s == Just id && namedAuthorizationsApproved s
+  StrictLegacy104 -> strictLegacy104Artifact s && namedAuthorizationsApproved s
+  _ -> False
+fromDriverDecision :: DriverDecision -> PackageOutcome
+fromDriverDecision StartHostDriver          = DispatchGoalDriver "/goal"
+fromDriverDecision (PrintGoal command)      = GoalHandoff command
+fromDriverDecision (DriverBlocked reason)   = Blocked reason
+```
+
+落盘后按共享 `selectGoalDriver` 派发同一条 literal `/goal`；driver 内循环为
+implementation → review/fix → QA/fix → acceptance，全部 accepted 后才进入 final audit。
+
+Goal package 保留两项互不替代的机器授权证据：`goal-acceptance` 允许 driver 在证据通过后完成 acceptance；`goal-commits` 允许它按 feature 自动 scoped-commit。首次落盘时 `approvals.goal-acceptance` 与 `approvals.goal-commits` 都保持 pending，并在同一个 `ConfirmGoalExecutionAuthorization` checkpoint 展示完整 `/goal` 与两类副作用。owner 一次批准后，typed resume 原子更新 group、两个 decision、两份不同 `ApprovalRef` 和 ready projection；不得先后询问两次。canonical `GroupRejected` 先 handoff；`GroupApproved` 有非空 ID 时优先于 stale state projection：全匹配则 ready，否则只 repair；空 ID 归一为 missing/user gate。没有有效 approved group 时，state projection rejected 才 handoff。`StrictLegacy104` 只允许 group 与 `execution_confirmation_id` key 均不存在、状态属于旧版可派发/终态且两份旧 ref 有效的 1.0.4 artifact。state-first、roadmap/design 确认或 acceptance ref 均不能替代 Goal 启动确认与 commit ref。
 
 注意：不要把长任务正文塞进 `/goal` 参数。长协议和 feature 执行规格写入 roadmap 自己的目录，`/goal` 只引用这些文件和终止标记。
 
@@ -50,7 +99,9 @@
 
 ---
 
-## 两次确认门禁
+## 两次内容确认 + 一次 Goal execution authorization
+
+历史契约中的“`两次确认门禁`”只指 roadmap 与全量 child design 两次内容确认；它不表示 Goal 启动要拆成两次授权。
 
 本协议必须按两次确认推进，不能跳过。
 
@@ -69,7 +120,7 @@
 
 ### 第二次确认：所有 feature design
 
-对 roadmap items 里的每个 planned 子 feature，按依赖顺序逐个完成 `cs-feat` design 阶段的候选设计阶段。调用 `cs-feat` 时必须带内部上下文 `epic_child_batch: true`，表示这是 `cs-epic` 批量子设计流程，不是普通单 feature 流程。**该标志同时表示 CONTEXT / adrs / compound 等全局输入已在 planning 阶段统一加载**，子 feature design 复用、不各自重扫（见 `cs-feat` design 阶段"扫 .codestable 全局输入"）：
+对 roadmap items 里的每个 planned 子 feature，按 DAG 的 design admission 顺序逐个完成 `cs-feat` design 阶段的候选设计阶段。依赖项为 `done`、`dropped` 或独立 design-review `passed` 时，下游可进入设计；这项放宽只用于 child batch 设计，implementation 仍要求依赖严格全部 `done`。调用 `cs-feat` 时必须带内部上下文 `epic_child_batch: true`，表示这是 `cs-epic` 批量子设计流程，不是普通单 feature 流程。**该标志同时表示 CONTEXT / adrs / compound 等全局输入已在 planning 阶段统一加载**，子 feature design 复用、不各自重扫（见 `cs-feat` design 阶段"扫 .codestable 全局输入"）：
 
 - 创建 feature 目录。
 - 写 `{feature-slug}-design.md`，frontmatter 带 `roadmap` / `roadmap_item`，正文按 `.codestable/attention.md` 的报告语言落盘（默认中文）。
@@ -82,7 +133,7 @@ batch loop 的推进与退出纪律（每轮运行 `codestable-workflow-next.py 
 
 这里把 `cs-feat` design 阶段普通模式里的单 feature 用户整体 review 推迟到本协议统一处理：每份 design 先保持 `draft`，不要逐个改 `approved`。全部 feature design 都写完且 design-review 都 passed 后，一次性给用户 review。用户可能反复修改任意一个 design；每次修改后同步更新 checklist，并对实质变化重跑 `cs-feat` design-review 阶段。只有用户明确确认所有 design 后，才输出 `/goal`。
 
-用户确认所有 design 后，先把每份 `{feature-slug}-design.md` 的 frontmatter `status` 从 `draft` 改为 `approved`，再生成 goal 执行包。`cs-feat` implementation 阶段和 `cs-feat` acceptance 阶段都要求 design 已 approved；不要把 draft design 交给 goal 会话。
+全部 design-review 通过后，先处理 runtime 在批量确认 gate 前报出的 dropped dependency：删除/替换依赖或一并 drop 下游 item；清零后再让用户统一确认 design，并把每份 `{feature-slug}-design.md` 的 frontmatter `status` 从 `draft` 改为 `approved`。goal-state 的 features 必须按 runtime `topological_order` 写入；`cs-feat` implementation 和 acceptance 都要求 design 已 approved，不要把 draft design 交给 goal 会话。
 
 ---
 
@@ -110,6 +161,8 @@ batch loop 的推进与退出纪律（每轮运行 `codestable-workflow-next.py 
 - 最终审计会核验的交付物类型
 - 最终审计必须运行 `codestable-goal-consistency-gate.py --roadmap {roadmap-path}`
 - 最终审计会聚合 goal-evidence-summary、provider warnings、E/C/H summary 和 H-only core checks
+- Goal acceptance 的独立 owner authorization 与 `approval-report.md` 引用
+- 每个 feature 自动 scoped-commit 的独立 owner authorization、影响说明与 `approval-report.md#goal-commits` 引用
 
 ### `goal-state.yaml`
 
@@ -124,10 +177,15 @@ batch loop 的推进与退出纪律（每轮运行 `codestable-workflow-next.py 
 
 ```yaml
 roadmap: "{slug}"
-status: ready-to-dispatch      # ready-to-dispatch|handoff|complete
+status: awaiting-authorization # awaiting-authorization|ready-to-dispatch|handoff|complete
 baseline_ref: "{git rev-parse HEAD 或 no-git}"
-driver_kind: none            # paseo|native|none，派发成功后写回
+driver_kind: none            # host-agent|none，派发成功后写回
 driver_id: ""
+execution_confirmation_id: "" # Goal 启动确认后与 approval group 的 confirmation_id 一致
+acceptance_authorization: pending # pending|approved|rejected；pending 时不得派发
+acceptance_authorization_ref: "approval-report.md#goal-acceptance"
+commit_authorization: pending # pending|approved|rejected；pending 时不得派发或 commit
+commit_authorization_ref: "approval-report.md#goal-commits"
 handoff_reason: ""           # status=handoff 时必填
 handoff_next: ""             # status=handoff 时必填
 current_feature_index: 0
@@ -143,7 +201,12 @@ features:
     status: pending
 ```
 
-`current_feature_index` 是 **0-based**，指向 `features` 数组中下一个要处理的元素；第一个 feature 必须是 `0`。每个 feature accepted 后必须 scoped-commit 且确认工作树干净，再加 1。展示给用户的 `Feature: N/总数` 仍使用 1-based。roadmap item 若在执行前被标 `dropped`，不要写入 `goal-state.features`；已进入 `goal-state.features` 的条目必须走到 `accepted` 或回退修复。
+首次写 package 时必须保持上面的 `awaiting-authorization` + 两项 `pending`，并在同 unit
+`approval-report.md` 写 `approval_groups.goal-execution: {status: pending, confirmation_id: "", decisions: [goal-acceptance, goal-commits]}` 与两项 pending decision。`AuthorizeGoalExecutionInput` 先生成唯一 `ConfirmationId`，用同一次 atomic replace 把 group status/id 和两项 named decision 写为 approved，形成 durable commit point；然后才幂等同步 goal-state 的相同 id、两份 ref 和 `status: ready-to-dispatch`。不得反转写入顺序、用模板预填批准，或留下只批准一项后继续询问另一项的交互状态。
+
+若 durable commit point 已 approved，但 goal-state 因崩溃仍是 pending、只更新一项、缺 id 或仍为 `awaiting-authorization`，`codestable-workflow-next.py` 必须返回 `continue` + `repair-epic-goal-execution-authorization`。repair 只按 approval group 中的同一 id 幂等同步 goal-state，不再次请求 owner；active/complete/handoff 状态保持其原有优先级。两项仍由 canonical approval artifact 分别机械核验，任一证据无效都不得派发。没有 approval group、但两项旧式 named approval 与 goal-state 均已 approved 的 1.0.4 artifact 按 legacy compatibility 放行并给 warning。
+
+`current_feature_index` 是 **0-based**，指向 `features` 数组中下一个要处理的元素；第一个 feature 必须是 `0`。feature accepted 后先把状态与 index 加 1 一起持久化，再机械复核 `goal-commits` 的 approval artifact/ref；仍可验证时才把这些状态更新纳入 scoped-commit，并在 commit 后确认工作树干净，否则持久化 handoff 且绝不提交。展示给用户的 `Feature: N/总数` 仍用 1-based。执行前 dropped item 不写入 features；已进入的条目必须 accepted 或回退修复。
 
 与单 feature goal 不同，epic goal 用 `current_feature_index` 表示跨 feature 进度，并用每个 `features[].status` 表示单个 feature 状态；单 feature 内部的 implementation / review / QA / acceptance 细粒度阶段仍由对应 feature 产物和 `goal-protocol-feature-loop.md` 核验，不在 epic 顶层 state 里再复制一套 `stage` 字段。
 
@@ -185,7 +248,7 @@ features:
 6. 每个 checklist step 是否可独立验证，且初始 `steps.status` 为 `pending`、`checks.status` 为 `pending`。
 7. 每个 feature 是否有必跑命令 / 基线风险 / 交付物 / 清洁度规则。
 8. 每个 goal-feature spec 是否写明 design-review / review / QA / acceptance 产物路径，以及 review blocking / QA failed 的返回路径。
-9. `goal-state.yaml` 是否能断点恢复，且 `current_feature_index` 使用 0-based 语义；complete/handoff 是否已先于残留 driver 元数据判定。
+9. `goal-state.yaml` 是否能断点恢复，`current_feature_index` 是否 0-based，acceptance/commit 两份 authorization 是否来自独立命名 decision；complete/handoff 是否先于残留 driver 元数据。
 10. `goal-plan.md` 是否写明 roadmap 级核心验收路径、最终聚合测试命令、非功能性替代证据策略、DoD Policy、Gate Policy、Provider Policy。
 11. 用户是否已明确确认 roadmap 和所有 feature design。
 12. `goal-protocol*.md` 是否都低于 300 行，且没有把 roadmap slug 误替换进 feature 标记；`Feature:` 行必须使用 `<feature-slug>` 或真实当前 feature slug。
@@ -196,11 +259,15 @@ features:
 
 ## 输出和派发 goal 指令
 
-确认通过后，读取 `support/goal-command-template.md`，替换 `{slug}`，准备一条 fenced `/goal`。
+自查通过后，读取 `support/goal-command-template.md`，替换 `{slug}`，准备一条 fenced `/goal`，
+连同 Goal acceptance、逐 feature scoped-commit 的影响范围一起展示在唯一的 Goal 启动 checkpoint。
+owner 确认这条指令后原子批准两项命名 decision，并在当前 run 立即继续派发，不再询问第二次授权。
+该 checkpoint 必须同时展示 `Non-Automatic Actions`：remote push、merge、publish、release、deploy、
+promotion 和 production cutover 都不会自动发生，仍需对应流程的独立 owner authorization。
 
-然后按 `.codestable/reference/agent-conventions.md` 的 Goal driver 派发规则执行：
+授权落盘后按 `.codestable/reference/agent-conventions.md` 的 Goal driver 派发规则执行：
 
-- 有可见 Paseo subagent 或可见 native Task/Agent 时，用上面生成的同一条 literal `/goal` 指令作为 driver 初始任务启动 driver，并把 agent id / run id / 查看方式告诉用户。
+- 有满足共享契约的可见 host Agent 时，用上面生成的同一条 literal `/goal` 指令作为 driver 初始任务启动 driver，并把 agent id / run id / 查看方式告诉用户。
 - driver 不可见、不可追踪、缺授权或派发失败时，不启动后台任务，只打印 fenced `/goal`，让用户粘贴到新的 agent 会话执行。
 - 主 agent 不能仅凭“已派发”宣布 roadmap 完成；完成必须由 goal 产物和 transcript 标记证明。
 

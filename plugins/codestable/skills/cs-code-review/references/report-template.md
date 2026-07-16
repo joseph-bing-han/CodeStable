@@ -14,21 +14,27 @@
 
 | 值 | 含义 |
 |---|---|
-| `subagent+ocr` | Task agent reviewer（Paseo subagent 或原生 Codex/Claude Task/Agent）+ ocr CLI 均已完成并合并 |
+| `subagent+ocr` | 独立 Task agent reviewer + ocr CLI 均已完成并合并 |
 | `subagent` | 仅 Task agent reviewer 完成 |
 | `ocr` | 仅 ocr CLI 完成 |
 | `self` | 仅主 agent 本地 review |
 
-下游质量 gate 默认要求 `reviewer: subagent` 或 `subagent+ocr`；`ocr` 和 `self` 需配 `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` 才放行。`status: passed` 时必填 `reviewer`。
+下游质量 gate 默认要求 `reviewer: subagent` 或 `subagent+ocr`；`ocr` 和 `self` 需配 `CODESTABLE_ALLOW_SELF_REVIEW_FALLBACK=1` 才放行。`status: passed` 时必填 `reviewer`。`status: blocked` 且没有任何已完成 reviewer 时省略该字段；不得用 completed 值伪装 pending / failed。
 
 ```markdown
 ---
 doc_type: feature-review
 feature: YYYY-MM-DD-slug
 status: passed|changes-requested|blocked
-reviewer: subagent+ocr|subagent|ocr|self
+reviewer: subagent+ocr|subagent|ocr|self # blocked 且无 completed reviewer 时整行省略
 reviewed: YYYY-MM-DD
 round: 1
+lane_a_state: not-started|ready-to-launch|pending|completed|failed|skipped|unavailable
+lane_a_ref: "" # pending 时必填宿主 AgentRef；其余状态保留已有 ref
+lane_a_reason: ""
+lane_b_state: not-started|ready-to-launch|pending|completed|failed|skipped|unavailable
+lane_b_ref: "" # pending 时必填 OCR run id；其余状态保留已有 ref
+lane_b_reason: ""
 ---
 
 # {slug} 代码审查报告
@@ -47,9 +53,9 @@ round: 1
 
 ### Independent Review
 
-- Detection: {主 agent 自检结果——Paseo subagent / 原生 Codex/Claude Task/Agent / ocr CLI 各是否可用}
-- 环节 A 独立隔离 Task agent: {paseo|native-agent|local-only} + {not-available|pending|completed|failed|blocked|skipped-by-user}
-- 环节 B OCR CLI: not-available|completed|failed|skipped-scope-ambiguous|skipped-by-user
+- Detection: {主 agent 自检结果——heterogeneous agent / independent agent / ocr CLI 各是否可用}
+- 环节 A 独立隔离 Task agent: {heterogeneous-agent|independent-agent|local-only} + {not-started|ready-to-launch|pending|completed|failed|unavailable}
+- 环节 B OCR CLI: not-started|ready-to-launch|pending|completed|failed|unavailable|skipped
 - OCR severity mapping: High→blocking/important, Medium→nit/suggestion, Low→discarded
 - Merge policy: {各环节结果已逐条本地核验后合并 / 未启用原因 / pending 时不得定稿}
 - Gate effect: {none / blocks final verdict until started lanes complete / user-approved downgrade}
@@ -122,5 +128,7 @@ round: 1
 - Targeted verification: {commands + results}
 - Classification: {为什么是 test/docs/type/metadata/nit-only，且未改变行为、公开契约、安全、数据、并发或架构}
 ```
+
+lane 字段是中间状态的恢复事实并绑定当前 `round`：`pending` 必须带对应 ref，`unavailable` / `failed` 必须带 reason，恢复输入精确匹配 lane/ref。focused closure 复用同 round 的 completed；完整复审增加 round 并重置 lane。旧 `status: blocked` 没有字段、ref 缺失或类型错误时 fail-closed，不得推断为 Awaiting 或重复启动。
 
 没有某类 finding 时写 `none`，不要删除章节；下一轮复审要能对比。
