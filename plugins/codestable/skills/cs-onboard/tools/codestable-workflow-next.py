@@ -16,7 +16,12 @@ if os.environ.get("PYTHONDONTWRITEBYTECODE") != "1":
     os.execvpe(sys.executable, [sys.executable, *sys.argv], os.environ)
 sys.dont_write_bytecode = True
 
-from codestable_gate_common import load_yaml, load_yaml_text, named_authorization_state
+from codestable_gate_common import (
+    load_yaml,
+    load_yaml_text,
+    named_approval_group_state,
+    named_authorization_state,
+)
 from codestable_common import SUBAGENT_REVIEWERS, review_has_subagent_evidence
 
 
@@ -1336,51 +1341,123 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
         commit_authorization_ref,
         commit_authorization_reason,
     ) = authorization_state(roadmap, state, "commit_authorization", "goal-commits")
-    if acceptance_authorization == "rejected":
+    (
+        execution_confirmation,
+        execution_confirmation_id,
+        execution_confirmation_reason,
+    ) = named_approval_group_state(
+        roadmap,
+        "goal-execution",
+        ("goal-acceptance", "goal-commits"),
+        frontmatter,
+    )
+    if execution_confirmation == "rejected":
         return decision(
             workflow="epic",
             status="handoff",
             next_action="CS_ROADMAP_GOAL_HANDOFF",
-            reason="epic goal acceptance authorization was rejected",
+            reason=execution_confirmation_reason,
             warnings=warnings,
             evidence={"goal_state": rel(root, goal_state)},
         )
-    if commit_authorization == "rejected":
-        return decision(
-            workflow="epic",
-            status="handoff",
-            next_action="CS_ROADMAP_GOAL_HANDOFF",
-            reason="epic goal commit authorization was rejected",
-            warnings=warnings,
-            evidence={"goal_state": rel(root, goal_state)},
+
+    state_confirmation_id = str(state.get("execution_confirmation_id") or "").strip()
+    if execution_confirmation == "approved":
+        driver_kind = state.get("driver_kind")
+        driver_id = state.get("driver_id")
+        target_status = (
+            state_status
+            if driver_kind in {"host-agent", "paseo", "native"} and driver_id
+            else "ready-to-dispatch" if state_status == "awaiting-authorization" else state_status
         )
-    if acceptance_authorization != "approved":
-        return decision(
-            workflow="epic",
-            status="user_gate",
-            next_action="authorize-epic-goal-acceptance",
-            reason=acceptance_authorization_reason,
-            warnings=warnings,
-            evidence={
-                "goal_state": rel(root, goal_state),
-                "acceptance_authorization_ref": acceptance_authorization_ref,
-                "acceptance_authorization_reason": acceptance_authorization_reason,
-            },
-        )
-    if commit_authorization != "approved":
-        return decision(
-            workflow="epic",
-            status="user_gate",
-            next_action="authorize-epic-goal-commits",
-            reason=commit_authorization_reason,
-            warnings=warnings,
-            evidence={
-                "goal_state": rel(root, goal_state),
-                "acceptance_authorization_ref": acceptance_authorization_ref,
-                "commit_authorization_ref": commit_authorization_ref,
-                "commit_authorization_reason": commit_authorization_reason,
-            },
-        )
+        repair_reasons = []
+        if state_confirmation_id != execution_confirmation_id:
+            repair_reasons.append("execution_confirmation_id is not synchronized")
+        if acceptance_authorization != "approved":
+            repair_reasons.append(
+                acceptance_authorization_reason
+                or f"acceptance_authorization projection is {acceptance_authorization}"
+            )
+        if commit_authorization != "approved":
+            repair_reasons.append(
+                commit_authorization_reason
+                or f"commit_authorization projection is {commit_authorization}"
+            )
+        if target_status != state_status:
+            repair_reasons.append("goal-state status still awaits authorization")
+        if repair_reasons:
+            return decision(
+                workflow="epic",
+                status="continue",
+                next_action="repair-epic-goal-execution-authorization",
+                reason="; ".join(repair_reasons),
+                warnings=warnings,
+                evidence={
+                    "goal_state": rel(root, goal_state),
+                    "execution_confirmation_id": execution_confirmation_id,
+                    "target_status": target_status,
+                    "acceptance_authorization": "approved",
+                    "acceptance_authorization_ref": "approval-report.md#goal-acceptance",
+                    "commit_authorization": "approved",
+                    "commit_authorization_ref": "approval-report.md#goal-commits",
+                },
+            )
+    else:
+        if acceptance_authorization == "rejected":
+            return decision(
+                workflow="epic",
+                status="handoff",
+                next_action="CS_ROADMAP_GOAL_HANDOFF",
+                reason="epic goal acceptance authorization was rejected",
+                warnings=warnings,
+                evidence={"goal_state": rel(root, goal_state)},
+            )
+        if commit_authorization == "rejected":
+            return decision(
+                workflow="epic",
+                status="handoff",
+                next_action="CS_ROADMAP_GOAL_HANDOFF",
+                reason="epic goal commit authorization was rejected",
+                warnings=warnings,
+                evidence={"goal_state": rel(root, goal_state)},
+            )
+        if (
+            execution_confirmation == "absent"
+            and acceptance_authorization == "approved"
+            and commit_authorization == "approved"
+            and "execution_confirmation_id" not in state
+            and state_status in {"ready-to-dispatch", "complete", "completed"}
+        ):
+            warnings = [
+                *warnings,
+                "legacy epic goal approvals have no goal-execution confirmation group",
+            ]
+        else:
+            authorization_reasons = [execution_confirmation_reason]
+            authorization_reasons.extend(
+                reason
+                for status, reason in (
+                    (acceptance_authorization, acceptance_authorization_reason),
+                    (commit_authorization, commit_authorization_reason),
+                )
+                if status != "approved"
+            )
+            return decision(
+                workflow="epic",
+                status="user_gate",
+                next_action="authorize-epic-goal-execution",
+                reason="; ".join(authorization_reasons),
+                warnings=warnings,
+                evidence={
+                    "goal_state": rel(root, goal_state),
+                    "execution_confirmation_id": execution_confirmation_id,
+                    "execution_confirmation_reason": execution_confirmation_reason,
+                    "acceptance_authorization_ref": acceptance_authorization_ref,
+                    "acceptance_authorization_reason": acceptance_authorization_reason,
+                    "commit_authorization_ref": commit_authorization_ref,
+                    "commit_authorization_reason": commit_authorization_reason,
+                },
+            )
     if state_status in {"complete", "completed"}:
         return decision(
             workflow="epic",
@@ -1390,6 +1467,7 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
             warnings=warnings,
             evidence={
                 "goal_state": rel(root, goal_state),
+                "execution_confirmation_id": execution_confirmation_id or state_confirmation_id,
                 "acceptance_authorization_ref": acceptance_authorization_ref,
                 "commit_authorization_ref": commit_authorization_ref,
             },
@@ -1407,11 +1485,12 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
                 "goal_state": rel(root, goal_state),
                 "driver_kind": driver_kind,
                 "driver_id": driver_id,
+                "execution_confirmation_id": execution_confirmation_id or state_confirmation_id,
                 "acceptance_authorization_ref": acceptance_authorization_ref,
                 "commit_authorization_ref": commit_authorization_ref,
             },
         )
-    if state_status == "ready-to-dispatch":
+    if state_status in {"awaiting-authorization", "ready-to-dispatch"}:
         return decision(
             workflow="epic",
             status="dispatch_goal",
@@ -1420,6 +1499,7 @@ def _epic_next(roadmap: Path) -> dict[str, Any]:
             warnings=warnings,
             evidence={
                 "goal_state": rel(root, goal_state),
+                "execution_confirmation_id": execution_confirmation_id or state_confirmation_id,
                 "acceptance_authorization_ref": acceptance_authorization_ref,
                 "commit_authorization_ref": commit_authorization_ref,
             },

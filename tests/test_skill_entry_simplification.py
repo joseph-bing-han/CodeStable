@@ -464,29 +464,65 @@ def test_goal_mode_overrides_stage_user_waits() -> None:
     assert "`cs-feat` / `cs-epic` 的 goal 协议" in accept
     assert "ResumeGoalAcceptance ApprovalRef" in accept
     assert "acceptance_authorization: approved" in feat_goal
-    assert "acceptance_authorization: approved" in epic_goal
+    assert "status: awaiting-authorization" in epic_goal
+    assert "acceptance_authorization: pending" in epic_goal
+    assert "commit_authorization: pending" in epic_goal
+    assert "两项仍由 canonical" in epic_goal
+    assert "approval artifact 分别机械核验" in epic_goal
     assert "approvals.goal-acceptance" in feat_goal
     assert "approvals.goal-acceptance" in epic_goal
     assert "approvals.goal-commits" in epic_goal
     assert "applyResumeInput" in feat
     assert "applyCheckpointResume" in epic_skill
     assert "ConfirmGoalAcceptanceAuthorization" in feat
-    assert "ConfirmGoalAcceptanceAuthorization" in epic_skill
-    assert "RejectGoalAcceptanceInput" in epic_skill
-    assert "PersistGoalAcceptanceRejection" in epic_skill
-    assert "ConfirmGoalCommitAuthorization" in epic_skill
-    assert "RejectGoalCommitsInput" in epic_skill
-    assert "PersistGoalCommitRejection" in epic_skill
-    assert "onCheckpoint ConfirmGoalAcceptanceAuthorization" in epic_skill
-    assert "onCheckpoint ConfirmGoalCommitAuthorization" in epic_skill
-    assert "commit_authorization: approved" in epic_goal
+    assert "ConfirmGoalExecutionAuthorization Command" in epic_skill
+    assert "data GoalExecutionAuthorization" in epic_skill
+    assert "GroupApproved ConfirmationId ApprovalRef ApprovalRef" in epic_skill
+    assert "StrictLegacy104 ApprovalRef ApprovalRef" in epic_skill
+    assert "approvedGroupWithMatchingProjection" in epic_skill
+    assert "GoalAuthorizationNeedsRepair WorkflowEvidence" in epic_skill
+    assert "canonicalGroupApprovedWithNonEmptyId a = GoalAuthorizationNeedsRepair" in epic_skill
+    assert "stateProjectionRejected a = GoalHandoffBlocked" in epic_skill
+    assert "RepairGoalExecutionAuthorization WorkflowEvidence" in epic_skill
+    assert "strictLegacy104Artifact" in epic_skill
+    assert "AuthorizeGoalExecutionInput ConfirmationId ApprovalRef ApprovalRef" in epic_skill
+    assert "RejectGoalExecutionInput" in epic_skill
+    assert "PersistGoalExecutionAuthorization ConfirmationId ApprovalRef ApprovalRef" in epic_skill
+    assert "PersistGoalExecutionRejection" in epic_skill
+    assert "onCheckpoint (ConfirmGoalExecutionAuthorization command)" in epic_skill
+    assert "不得只批准一项，也不得再次询问" in epic_skill
+    assert "approval_groups.goal-execution" in epic_skill
+    assert "repairGoalExecutionAuthorization" in epic_skill
+    assert "repair-epic-goal-execution-authorization" in epic_skill
+    assert "remote push、merge、publish、release、deploy、promotion" in epic_skill
+    assert 'next.next_action == "authorize-epic-goal-execution"' in epic_skill
+    assert "HumanCheckpoint (ConfirmGoalExecutionAuthorization (goalCommand slug))" in epic_skill
+    assert "commit_authorization: approved" not in epic_goal
     assert "approval-report.md#goal-commits" in epic_goal
-    assert "authorize-epic-goal-commits" in (
-        SKILLS / "cs-onboard/tools/codestable-workflow-next.py"
-    ).read_text(encoding="utf-8")
+    assert "goalExecutionConfirmation :: GoalExecutionConfirmation" in epic_goal
+    assert "not (goalExecutionAuthorizationReady s)" in epic_goal
+    assert "is GroupApproved id && nonEmpty id && not" in epic_goal
+    assert "RepairGoalExecutionAuthorization (goalProjectionRepairEvidence s id)" in epic_goal
+    assert "GroupApproved id -> nonEmpty id" in epic_goal
+    assert "stateExecutionConfirmationId s == Just id" in epic_goal
+    assert "StrictLegacy104 -> strictLegacy104Artifact s" in epic_goal
+    epic_runtime = (SKILLS / "cs-onboard/tools/codestable-workflow-next.py").read_text(
+        encoding="utf-8"
+    )
+    assert "authorize-epic-goal-execution" in epic_runtime
+    assert "authorize-epic-goal-acceptance" not in epic_runtime
+    assert "authorize-epic-goal-commits" not in epic_runtime
     assert epic_goal.index("commitAuthorization s == AuthorizationRejected") < epic_goal.index(
         "not (packagePersisted s)"
-    ) < epic_goal.index("acceptanceAuthorization s == AuthorizationMissing")
+    ) < epic_goal.rindex("not (goalExecutionAuthorizationReady s)")
+    assert epic_skill.index("canonicalAuthorizationRejected a") < epic_skill.index(
+        "approvedGroupWithMatchingProjection a"
+    ) < epic_skill.index("canonicalGroupApprovedWithNonEmptyId a") < epic_skill.index(
+        "stateProjectionRejected a"
+    )
+    assert epic_goal.index("goalExecutionConfirmation s == GroupRejected") < epic_goal.index(
+        "is GroupApproved id && nonEmpty id && not"
+    ) < epic_goal.index("acceptanceAuthorization s == AuthorizationRejected")
     assert "其他 `RejectCheckpoint` 保持原状态" in feat
     # host driver 必须同时可见且能启动独立 reviewer；否则打印 /goal。
     assert "visibleHostDriver e && canSpawnReviewer e" in agent_conventions

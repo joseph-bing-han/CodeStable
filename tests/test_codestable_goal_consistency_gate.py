@@ -121,6 +121,9 @@ def write_final_audit_candidate(
     include_feature: bool = True,
     duplicate_feature: bool = False,
     item_status: str = "done",
+    execution_confirmation_id: str | None = "goal-confirm-1",
+    approval_group_status: str | None = "approved",
+    approval_group_confirmation_id: str = "goal-confirm-1",
 ) -> Path:
     roadmap = tmp_path / "repo/.codestable/roadmap/billing-system"
     item_rows = (
@@ -149,22 +152,40 @@ def write_final_audit_candidate(
         if include_feature
         else "current_feature_index: 0\nfeatures: []\n"
     )
+    confirmation_state = (
+        f'execution_confirmation_id: "{execution_confirmation_id}"\n'
+        if execution_confirmation_id is not None
+        else ""
+    )
     write(
         roadmap / "goal-state.yaml",
         "roadmap: billing-system\n"
         "status: ready-to-dispatch\n"
-        "acceptance_authorization: approved\n"
-        'acceptance_authorization_ref: "approval-report.md#goal-acceptance"\n'
-        "commit_authorization: approved\n"
+        + confirmation_state
+        + "acceptance_authorization: approved\n"
+        + 'acceptance_authorization_ref: "approval-report.md#goal-acceptance"\n'
+        + "commit_authorization: approved\n"
         f'commit_authorization_ref: "{commit_ref}"\n'
         + feature_state,
     )
+    approval_group = ""
+    if approval_group_status is not None:
+        approval_group = (
+            "approval_groups:\n"
+            "  goal-execution:\n"
+            f"    status: {approval_group_status}\n"
+            f'    confirmation_id: "{approval_group_confirmation_id}"\n'
+            "    decisions:\n"
+            "      - goal-acceptance\n"
+            "      - goal-commits\n"
+        )
     write(
         roadmap / "approval-report.md",
         "---\ndoc_type: approval-report\nstatus: approved\napprovals:\n"
         "  goal-acceptance: approved\n"
         f"  goal-commits: {commit_decision}\n"
-        "---\n# Approval\n",
+        + approval_group
+        + "---\n# Approval\n",
     )
     if include_feature:
         write_feature_artifacts(roadmap.parents[2])
@@ -195,7 +216,102 @@ def test_final_consistency_gate_checks_authorizations_before_audit_report(tmp_pa
     authorizations = result["evidence"][0]["authorizations"]
     assert authorizations["acceptance_authorization"]["status"] == "approved"
     assert authorizations["commit_authorization"]["status"] == "approved"
+    confirmation = result["evidence"][1]["goal_execution_confirmation"]
+    assert confirmation["status"] == "approved"
+    assert confirmation["confirmation_id"] == "goal-confirm-1"
+    assert confirmation["state_confirmation_id"] == "goal-confirm-1"
     assert not (roadmap / "goal-audit.md").exists()
+
+
+def test_final_consistency_gate_rejects_confirmation_id_mismatch(tmp_path: Path) -> None:
+    roadmap = write_final_audit_candidate(
+        tmp_path,
+        execution_confirmation_id="other-confirmation",
+    )
+
+    completed, result = run_gate(roadmap)
+
+    assert completed.returncode == 1
+    assert result["status"] == "failed"
+    assert "goal-state execution_confirmation_id does not match approval group" in result[
+        "blocking"
+    ]
+
+
+@pytest.mark.parametrize("group_status", ["pending", "rejected"])
+def test_final_consistency_gate_rejects_unapproved_execution_group(
+    tmp_path: Path,
+    group_status: str,
+) -> None:
+    roadmap = write_final_audit_candidate(tmp_path, approval_group_status=group_status)
+
+    completed, result = run_gate(roadmap)
+
+    assert completed.returncode == 1
+    assert result["status"] == "failed"
+    assert any("approval group goal-execution" in item for item in result["blocking"])
+
+
+def test_final_consistency_gate_allows_legacy_approvals_with_warning(tmp_path: Path) -> None:
+    roadmap = write_final_audit_candidate(
+        tmp_path,
+        execution_confirmation_id=None,
+        approval_group_status=None,
+    )
+
+    completed, result = run_gate(roadmap)
+
+    assert completed.returncode == 0
+    assert result["status"] == "passed"
+    assert "legacy epic goal approvals" in result["warnings"][-1]
+
+
+def test_final_consistency_gate_rejects_new_state_without_execution_group(
+    tmp_path: Path,
+) -> None:
+    roadmap = write_final_audit_candidate(
+        tmp_path,
+        execution_confirmation_id="",
+        approval_group_status=None,
+    )
+
+    completed, result = run_gate(roadmap)
+
+    assert completed.returncode == 1
+    assert result["status"] == "failed"
+    assert "approval group goal-execution is absent" in result["blocking"]
+
+
+def test_final_consistency_gate_rejects_external_approval_symlink(tmp_path: Path) -> None:
+    roadmap = write_final_audit_candidate(tmp_path)
+    approval = roadmap / "approval-report.md"
+    external = tmp_path / "external-approval-report.md"
+    write(external, approval.read_text(encoding="utf-8"))
+    approval.unlink()
+    approval.symlink_to(external)
+
+    completed, result = run_gate(roadmap)
+
+    assert completed.returncode == 1
+    assert result["status"] == "failed"
+    assert "approval-report.md escapes the workflow unit" in result["blocking"]
+
+
+def test_final_consistency_gate_does_not_label_incomplete_approvals_as_legacy(
+    tmp_path: Path,
+) -> None:
+    roadmap = write_final_audit_candidate(
+        tmp_path,
+        commit_decision="pending",
+        execution_confirmation_id=None,
+        approval_group_status=None,
+    )
+
+    completed, result = run_gate(roadmap)
+
+    assert completed.returncode == 1
+    assert result["status"] == "failed"
+    assert not any("legacy epic goal approvals" in warning for warning in result["warnings"])
 
 
 @pytest.mark.parametrize(

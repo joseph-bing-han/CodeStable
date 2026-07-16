@@ -87,6 +87,7 @@ unit: {unit path or slug}
 status: pending
 reason: {interview | route-choice | review-authorization | risk | merge | blocker | other}
 approvals: {} # 可被 runtime 消费的命名决策，例如 goal-acceptance: approved
+approval_groups: {} # 一次 owner answer 原子覆盖多个 named decision 时记录 group/status/confirmation_id/decisions
 created_at: YYYY-MM-DD
 ---
 
@@ -118,6 +119,11 @@ deploy、重写长期 specs 或接受风险。
 需要被 runtime 消费的授权使用 `approval-report.md#<decision-id>`；fragment 是 `approvals`
 中的 key，不是聊天标签。只有同 unit 的 canonical 文件且对应值为 `approved` 才有效；状态字段
 只写 `approved`、ref 非空、路径越界或文件缺失都不能放行。
+
+一次 owner answer 同时授权多个仍需分别核验的 named decision 时，使用 `approval_groups.<group-id>`
+记录 `status`、唯一 `confirmation_id` 和完整 `decisions` 列表，并用一次 atomic replace 同时更新 group
+与所有成员 decision。该 approval report 是 durable commit point；下游 state 只缓存相同
+`confirmation_id` 和各自 ref，可以从 group 幂等修复，但不能反向用 state 构造 owner approval。
 
 ## Approval 之后
 

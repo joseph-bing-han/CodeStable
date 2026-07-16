@@ -21,6 +21,7 @@ from codestable_gate_common import (
     load_yaml,
     load_yaml_text,
     main_exit,
+    named_approval_group_state,
     named_authorization_state,
     parse_args,
 )
@@ -212,6 +213,35 @@ def main() -> None:
         if authorization != "approved":
             blocking.append(reason or f"{field} was rejected")
     evidence.append({"authorizations": authorization_evidence})
+
+    confirmation_status, confirmation_id, confirmation_reason = named_approval_group_state(
+        roadmap,
+        "goal-execution",
+        ("goal-acceptance", "goal-commits"),
+        lambda path: frontmatter(path, blocking),
+    )
+    state_confirmation_id = str(state.get("execution_confirmation_id") or "").strip()
+    confirmation_evidence = {
+        "status": confirmation_status,
+        "confirmation_id": confirmation_id,
+        "state_confirmation_id": state_confirmation_id,
+        "reason": confirmation_reason,
+    }
+    evidence.append({"goal_execution_confirmation": confirmation_evidence})
+    legacy_authorizations_approved = all(
+        item["status"] == "approved" for item in authorization_evidence.values()
+    )
+    if confirmation_status == "approved":
+        if state_confirmation_id != confirmation_id:
+            blocking.append("goal-state execution_confirmation_id does not match approval group")
+    elif (
+        confirmation_status == "absent"
+        and "execution_confirmation_id" not in state
+        and legacy_authorizations_approved
+    ):
+        warnings.append("legacy epic goal approvals have no goal-execution confirmation group")
+    else:
+        blocking.append(confirmation_reason or "goal execution confirmation is not approved")
 
     if state.get("status") not in {"ready-to-dispatch", "complete", "completed"}:
         blocking.append("goal-state status is not ready for final audit")

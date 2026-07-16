@@ -119,6 +119,17 @@ def load_yaml_text(text: str) -> Any:
     return {} if parsed is None else parsed
 
 
+def canonical_approval_report_path(unit: Path) -> tuple[Path | None, str]:
+    """Resolve the canonical approval report without leaving its workflow unit."""
+    unit_root = unit.resolve()
+    approval_path = (unit / "approval-report.md").resolve()
+    try:
+        approval_path.relative_to(unit_root)
+    except ValueError:
+        return None, "approval-report.md escapes the workflow unit"
+    return approval_path, ""
+
+
 def named_authorization_state(
     unit: Path,
     state: dict[str, Any],
@@ -138,13 +149,17 @@ def named_authorization_state(
     if not separator or not path_text or fragment != decision_id:
         return "missing", reference, f"{field}_ref must be approval-report.md#{decision_id}"
 
+    canonical_path, canonical_reason = canonical_approval_report_path(unit)
+    if canonical_path is None:
+        return "missing", reference, canonical_reason
+
     unit_root = unit.resolve()
     approval_path = (unit / path_text).resolve()
     try:
         approval_path.relative_to(unit_root)
     except ValueError:
         return "missing", reference, f"{field}_ref escapes the workflow unit"
-    if approval_path != (unit / "approval-report.md").resolve():
+    if approval_path != canonical_path:
         return "missing", reference, f"{field}_ref must target the unit approval-report.md"
 
     approval = frontmatter_loader(approval_path)
@@ -157,6 +172,60 @@ def named_authorization_state(
     if decision_status != "approved":
         return "missing", reference, f"approval decision {decision_id} is not approved"
     return "approved", reference, ""
+
+
+def named_approval_group_state(
+    unit: Path,
+    group_id: str,
+    expected_decisions: tuple[str, ...],
+    frontmatter_loader: Callable[[Path], dict[str, Any]],
+) -> tuple[str, str, str]:
+    """Validate one durable owner answer that approves multiple named decisions."""
+    approval_path, canonical_reason = canonical_approval_report_path(unit)
+    if approval_path is None:
+        return "missing", "", canonical_reason
+    approval = frontmatter_loader(approval_path)
+    if not approval:
+        return "absent", "", "approval-report.md has no approval group"
+    if approval.get("doc_type") != "approval-report":
+        return "missing", "", "goal execution confirmation requires canonical approval-report.md"
+
+    groups = approval.get("approval_groups")
+    if groups is None:
+        return "absent", "", f"approval group {group_id} is absent"
+    if not isinstance(groups, dict) or not isinstance(groups.get(group_id), dict):
+        return "missing", "", f"approval group {group_id} is invalid"
+
+    group = groups[group_id]
+    confirmation_id = str(group.get("confirmation_id") or "").strip()
+    status = str(group.get("status") or "").strip()
+    decisions = group.get("decisions")
+    approvals = approval.get("approvals")
+    if isinstance(approvals, dict):
+        for decision_id in expected_decisions:
+            if str(approvals.get(decision_id) or "").strip() == "rejected":
+                return "rejected", confirmation_id, f"approval decision {decision_id} was rejected"
+    if status == "rejected":
+        return "rejected", confirmation_id, f"approval group {group_id} was rejected"
+    if status != "approved":
+        return "missing", confirmation_id, f"approval group {group_id} is not approved"
+    if not confirmation_id:
+        return "missing", "", f"approval group {group_id} has no confirmation_id"
+    if (
+        not isinstance(decisions, list)
+        or any(not isinstance(decision, str) for decision in decisions)
+        or len(decisions) != len(expected_decisions)
+        or set(decisions) != set(expected_decisions)
+    ):
+        return "missing", confirmation_id, f"approval group {group_id} decisions do not match"
+
+    if not isinstance(approvals, dict):
+        return "missing", confirmation_id, f"approval group {group_id} has no named decisions"
+    for decision_id in expected_decisions:
+        decision_status = str(approvals.get(decision_id) or "").strip()
+        if decision_status != "approved":
+            return "missing", confirmation_id, f"approval decision {decision_id} is not approved"
+    return "approved", confirmation_id, ""
 
 
 def main_exit(result: dict[str, Any], json_out: str | None = None) -> None:

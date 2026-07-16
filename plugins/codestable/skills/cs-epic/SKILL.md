@@ -8,8 +8,10 @@ contracts:
   - grep: "epic_child_batch: true"
   - grep: "codestable-workflow-next.py epic"
   - grep: "统一确认所有 design"
+  - grep: "ConfirmGoalExecutionAuthorization"
   - grep: "独立 Task agent reviewer"
   - grep: "final_answer_allowed: false"
+  - not-grep: "ConfirmGoalCommitAuthorization"
   - not-grep: "git push"
   - not-grep: "read all references"
 ---
@@ -39,29 +41,24 @@ csEpic :: EpicInput -> EpicOutcome
 csEpic = workflow
 data EpicInput
   = Start EpicRequest | Resume RepoFacts | ResumePlanningInput PlanningResume
-  | ConfirmRoadmapInput | ConfirmAllChildDesignInput
-  | ApproveLocalReviewInput | AuthorizeGoalAcceptanceInput ApprovalRef | RejectGoalAcceptanceInput
-  | AuthorizeGoalCommitsInput ApprovalRef | RejectGoalCommitsInput
+  | ConfirmRoadmapInput | ConfirmAllChildDesignInput | ApproveLocalReviewInput
+  | AuthorizeGoalExecutionInput ConfirmationId ApprovalRef ApprovalRef | RejectGoalExecutionInput
 data EpicRequest = EpicRequest
-  { requestedStage : Maybe EntryStage    -- planning | review | goal-package
-  , userGoal       : Maybe Text
-  , repoFacts      : RepoFacts           -- 优先于 args / 聊天历史
-  }
+  { requestedStage : Maybe EntryStage, userGoal : Maybe Text -- planning | review | goal-package
+  , repoFacts : RepoFacts }                                  -- 优先于 args / 聊天历史
 data EntryStage = PlanningEntry | ReviewEntry | GoalPackageEntry
 data Stage = Planning | Review | ChildDesignBatch | GoalPackage
 data RoadmapReviewState
   = ReviewMissing | ReviewPassed | ReviewChangesRequested
   | ReviewAwaiting AgentRef | ReviewNeedsOwnerApproval Reason
   | ReviewerFailed Reason | ReviewBlocked Reason
-data EpicGoalRunState                     -- 从 goal-state.yaml status/driver 字段恢复
-  = GoalMissing
-  | GoalReadyToDispatch ApprovalRef ApprovalRef -- acceptance ref + commit ref
-  | GoalAuthorizationMissing GoalAuthorizationKind
-  | GoalDriverActive DriverInfo           -- driver_kind + driver_id；仅非终态生效
-  | GoalComplete ApprovalRef ApprovalRef  -- 两项授权有效时优先于残留 driver 元数据
-  | GoalHandoffBlocked Reason             -- status: handoff；优先于残留 driver 元数据
-  | GoalUnknown Text
-data GoalAuthorizationKind = AcceptanceAuthorization | CommitAuthorization
+data GoalExecutionAuthorization
+  = GroupApproved ConfirmationId ApprovalRef ApprovalRef | StrictLegacy104 ApprovalRef ApprovalRef
+data EpicGoalRunState                     -- 从 canonical group + goal-state projection 恢复
+  = GoalMissing | GoalReadyToDispatch GoalExecutionAuthorization
+  | GoalAuthorizationMissing | GoalAuthorizationNeedsRepair WorkflowEvidence | GoalDriverActive DriverInfo
+  | GoalComplete GoalExecutionAuthorization
+  | GoalHandoffBlocked Reason | GoalUnknown Text
 data EpicState = EpicState                -- 从 .codestable/roadmap/{slug}/ 与子 features/ 恢复
   { roadmapStatus       : Missing | Draft | Confirmed  -- frontmatter status: active 归一为 Confirmed
   , roadmapReviewState  : RoadmapReviewState           -- 从 roadmap-review review_state 恢复
@@ -71,40 +68,32 @@ data EpicState = EpicState                -- 从 .codestable/roadmap/{slug}/ 与
   , pendingCheckpoint   : Maybe CheckpointReason
   }
 data EpicOutcome
-  = RoutedTo Stage
-  | Awaiting WaitReason
+  = RoutedTo Stage | Awaiting WaitReason
   | HumanCheckpoint CheckpointReason
-  | DispatchGoalDriver Command            -- 先尝试可见 Task agent；失败才降级为 GoalHandoff
-  | GoalHandoff Command
-  | Completed EpicSummary
-  | NeedsHuman Reason
-  | Blocked Reason
+  | RepairGoalExecutionAuthorization WorkflowEvidence | DispatchGoalDriver Command
+  | GoalHandoff Command | Completed EpicSummary
+  | NeedsHuman Reason | Blocked Reason
 data WaitReason = RoadmapReviewerRunning AgentRef | GoalDriverRunning DriverInfo | WorkflowWait Text
 data CheckpointReason
-  = ConfirmRoadmap | ConfirmAllChildDesign | ConfirmGoalAcceptanceAuthorization | ConfirmGoalCommitAuthorization | ApproveReviewFallback Reason
+  = ConfirmRoadmap | ConfirmAllChildDesign | ConfirmGoalExecutionAuthorization Command | ApproveReviewFallback Reason
 data CheckpointResume
   = PersistRoadmapConfirmed | PersistAllDesignsApproved | DelegatePlanningResume PlanningResume
-  | PersistGoalAcceptanceAuthorization ApprovalRef | PersistGoalAcceptanceRejection | PersistGoalCommitAuthorization ApprovalRef | PersistGoalCommitRejection | RerunReview OwnerApproval | RejectResume Reason
-
+  | PersistGoalExecutionAuthorization ConfirmationId ApprovalRef ApprovalRef | PersistGoalExecutionRejection
+  | RerunReview OwnerApproval | RejectResume Reason
 resumeCheckpoint :: EpicInput -> CheckpointResume
 resumeCheckpoint ConfirmRoadmapInput                = PersistRoadmapConfirmed
 resumeCheckpoint ConfirmAllChildDesignInput         = PersistAllDesignsApproved
 resumeCheckpoint (ResumePlanningInput resume)         = DelegatePlanningResume resume
-resumeCheckpoint (AuthorizeGoalAcceptanceInput ref)  = PersistGoalAcceptanceAuthorization ref
-resumeCheckpoint RejectGoalAcceptanceInput           = PersistGoalAcceptanceRejection
-resumeCheckpoint (AuthorizeGoalCommitsInput ref)      = PersistGoalCommitAuthorization ref
-resumeCheckpoint RejectGoalCommitsInput               = PersistGoalCommitRejection
+resumeCheckpoint (AuthorizeGoalExecutionInput confirmationId acceptanceRef commitRef) = PersistGoalExecutionAuthorization confirmationId acceptanceRef commitRef
+resumeCheckpoint RejectGoalExecutionInput            = PersistGoalExecutionRejection
 resumeCheckpoint ApproveLocalReviewInput             = RerunReview ApproveLocalOnly
 resumeCheckpoint _                                  = RejectResume InvalidCheckpointResume
-
 resumeMatches :: EpicInput -> CheckpointReason -> Bool
 resumeMatches ConfirmRoadmapInput ConfirmRoadmap = True
 resumeMatches ConfirmAllChildDesignInput ConfirmAllChildDesign = True
-resumeMatches input ConfirmGoalAcceptanceAuthorization = input is AuthorizeGoalAcceptanceInput _ || input == RejectGoalAcceptanceInput
-resumeMatches input ConfirmGoalCommitAuthorization = input is AuthorizeGoalCommitsInput _ || input == RejectGoalCommitsInput
+resumeMatches input (ConfirmGoalExecutionAuthorization _) = input is AuthorizeGoalExecutionInput _ _ _ || input == RejectGoalExecutionInput
 resumeMatches ApproveLocalReviewInput (ApproveReviewFallback _) = True
 resumeMatches _ _ = False
-
 applyCheckpointResume :: EpicInput -> EpicState -> Either Reason EpicState
 applyCheckpointResume (Start _) s = Right s
 applyCheckpointResume (Resume _) s = Right s
@@ -112,8 +101,19 @@ applyCheckpointResume (ResumePlanningInput r) s = persistPlanningResume s <$> re
 applyCheckpointResume input s
   | Just reason <- s.pendingCheckpoint, resumeMatches input reason = Right (persistCheckpointResume (resumeCheckpoint input) s)
   | otherwise = Left InvalidCheckpointResume
+restoreGoalAuthorization :: GoalArtifacts -> EpicGoalRunState
+restoreGoalAuthorization a
+  | canonicalAuthorizationRejected a = GoalHandoffBlocked "goal execution authorization rejected"
+  | approvedGroupWithMatchingProjection a = GoalReadyToDispatch (GroupApproved a.confirmationId a.acceptanceRef a.commitRef)
+  | canonicalGroupApprovedWithNonEmptyId a = GoalAuthorizationNeedsRepair (goalProjectionRepairEvidence a)
+  | stateProjectionRejected a = GoalHandoffBlocked "goal execution authorization projection rejected"
+  | strictLegacy104Artifact a = GoalReadyToDispatch (StrictLegacy104 a.acceptanceRef a.commitRef)
+  | otherwise = GoalAuthorizationMissing
+persistGoalExecutionAuthorization :: ConfirmationId -> ApprovalRefs -> EpicState -> EpicState
+persistGoalExecutionAuthorization confirmationId refs s = atomicReplaceApprovalReport (approvedGoalExecutionGroup confirmationId) >> syncApprovedGoalProjection confirmationId refs s
+repairGoalExecutionAuthorization :: WorkflowEvidence -> EpicState -> EpicState
+repairGoalExecutionAuthorization evidence s = repairGoalProjectionWhenGroupApproved "goal-execution" evidence s
 ```
-
 ```haskell
 restoreEpicStage :: EpicState -> EpicRequest -> EpicOutcome
 restoreEpicStage(s, request)
@@ -136,17 +136,17 @@ restoreEpicStage(s, request)
   | s.childrenDesign == AllPassed && not s.allDesignApproved
       -> HumanCheckpoint ConfirmAllChildDesign -- 停下让用户统一确认所有 design，确认后逐份标 approved
   | s.allDesignApproved && s.goalRunState == GoalMissing     -> RoutedTo GoalPackage
-  | s.goalRunState is GoalComplete _ _                       -> Completed EpicSummary
+  | s.goalRunState is GoalComplete _                         -> Completed EpicSummary
   | s.goalRunState is GoalHandoffBlocked reason              -> GoalHandoff (handoffCommand reason)
   | s.goalRunState is GoalDriverActive driver                -> Awaiting (GoalDriverRunning driver)
-  | s.goalRunState == GoalAuthorizationMissing AcceptanceAuthorization -> HumanCheckpoint ConfirmGoalAcceptanceAuthorization
-  | s.goalRunState == GoalAuthorizationMissing CommitAuthorization     -> HumanCheckpoint ConfirmGoalCommitAuthorization
-  | s.goalRunState is GoalReadyToDispatch _ _                -> DispatchGoalDriver "/goal"
+  | s.goalRunState is GoalAuthorizationNeedsRepair evidence   -> RepairGoalExecutionAuthorization evidence
+  | s.goalRunState == GoalAuthorizationMissing                -> HumanCheckpoint (ConfirmGoalExecutionAuthorization (goalCommand s))
+  | s.goalRunState is GoalReadyToDispatch _                  -> DispatchGoalDriver "/goal"
   | s.goalRunState is GoalUnknown raw                        -> Blocked ("unknown goal-state: " <> raw)
   | otherwise                                                -> Blocked InvalidEpicState
 ```
 
-`restoreEpicStage` 是唯一路由真相：扫 roadmap 与子 features 恢复 `EpicState`；`DelegatePlanningResume` 先交 planning protocol 的 `resumePlanning` 精确匹配 pending checkpoint 并持久化，再恢复本状态机。任一 goal authorization rejected 归一为 handoff，其他非 handoff 状态按缺失项归一为 acceptance/commit `GoalAuthorizationMissing`，两份可验证 `ApprovalRef` 都存在才 ready。子 design 是连续 batch loop，在统一确认前不得 final answer；stage protocol 见后文。
+`restoreEpicStage` 是唯一路由真相：扫 roadmap 与子 features 恢复 `EpicState`；`restoreGoalAuthorization` 只允许 canonical group approved 且 confirmation/ref projection 匹配，或没有新 marker 的严格 1.0.4 legacy artifact，构造 `GoalReadyToDispatch`，state-first 不得放行。任一 group / named decision rejected 归一为 handoff；group 已 approved 但 projection 未同步时归一为 `GoalAuthorizationNeedsRepair`，自动修复且不再次询问；其余缺失或不可验证才归一为 `GoalAuthorizationMissing`。`DelegatePlanningResume` 先精确恢复 planning checkpoint。用户确认同一条 `/goal` 后，先 atomic replace canonical approval report 形成 durable commit point，再幂等同步 goal-state。两份证据都可验证才派发。子 design 是连续 batch loop，在统一确认前不得 final answer；stage protocol 见后文。
 
 `cs-epic` 不在主线程直接执行长程 goal；只能通过可见 Task agent goal driver 派发。没有可见 driver 或派发失败时，回退为用户手动粘贴 `/goal`。
 
@@ -203,12 +203,16 @@ childDesignBatch slug = loop
         dispatch_goal -> step next.next_action >> loop
         user_gate | next.next_action == "all-feature-designs-confirmation"
                       -> stopAt (HumanCheckpoint ConfirmAllChildDesign)
+        user_gate | next.next_action == "authorize-epic-goal-execution"
+                      -> stopAt (HumanCheckpoint (ConfirmGoalExecutionAuthorization (goalCommand slug)))
         user_gate     -> stopAt (Blocked UnexpectedWorkflowUserGate)
         awaiting      -> stopAt (Awaiting (WorkflowWait next.next_action))
         handoff       -> stopAt (GoalHandoff next.next_action)
         blocked       -> stopAt (Blocked next.reason)
         _             -> stopAt (Blocked InvalidWorkflowNext)
       -- hook 输出 must_continue: true 或 final_answer_allowed: false 时只能来自前三个继续态；不得 final answer
+      -- repair-epic-goal-execution-authorization 只消费已 approved 的 durable confirmation evidence，
+      -- 幂等同步 goal-state 后继续 loop；不得再次请求 owner，也不得修改 approval commit point。
       -- 每轮先扫 {slug}-items.yaml：按 DAG 取下一个 design-ready 且缺 design、checklist
       -- 或 passed design-review 的 item，调用 cs-feat（epic_child_batch: true）推进；design-ready
       -- 允许依赖 done / dropped / design-review passed，但实现前仍要求依赖严格 done
@@ -243,12 +247,11 @@ review **gate 必需独立 Task agent reviewer**：主 agent 本地审查不得�
 onCheckpoint :: CheckpointReason -> Action
 onCheckpoint ConfirmRoadmap        = 停等用户确认 epic 规划            -- roadmap/epic planning review passed 后
 onCheckpoint ConfirmAllChildDesign = 停等用户统一确认所有 design，确认后逐份标 approved
-onCheckpoint ConfirmGoalAcceptanceAuthorization = 写 pending goal-acceptance decision，停等 owner 授权
-onCheckpoint ConfirmGoalCommitAuthorization = 写 pending goal-commits decision，停等 owner 授权自动 scoped-commit
+onCheckpoint (ConfirmGoalExecutionAuthorization command) = 展示 command 及 acceptance/scoped-commit 范围；写两项 pending decision，停等 owner 一次确认
 onCheckpoint (ApproveReviewFallback reason) = 停等 owner 决定是否批准 local-only review；记录 reason
 ```
 
-所有 `onCheckpoint` 都先把完整 reason 写入 canonical `approval-report.md` pending decision，再停等输入；无法恢复出同一 pending reason 时，任何 resume 都 fail-closed。
+所有 `onCheckpoint` 都先把完整 reason 写入 canonical `approval-report.md` pending decision，再停等输入；无法恢复出同一 pending reason 时，任何 resume 都 fail-closed。Goal 启动确认批准时，生成一个 `ConfirmationId`，先原子写入 `approval_groups.goal-execution` 与两项 approved named decision，再幂等同步 goal-state 的相同 id、两份不同 ref 和 ready 状态；不得先写 goal-state，不得只批准一项，也不得再次询问。checkpoint 的 `Non-Automatic Actions` 必须明确：不会自动执行 remote push、merge、publish、release、deploy、promotion 或 production cutover，这些仍需各自授权。拒绝则把 goal execution 持久化为 handoff，且不得派发。
 
 不要在第一个或任一单独子 feature design-review passed 后停下来要求用户确认执行；那是 `cs-feat` 普通单 feature 行为，在 `cs-epic` 子流程里必须延后到所有子 feature 都完成 design-review 后统一处理。
 driver 不可见、派发失败或返回 `CS_ROADMAP_GOAL_HANDOFF` 时走 `GoalHandoff`，不是 `HumanCheckpoint` / `NeedsHuman` 的第二种写法。

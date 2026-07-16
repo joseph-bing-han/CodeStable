@@ -233,7 +233,7 @@ acceptance / issue-fix 走完后把本次产物提交为一个 commit：
 - **范围**：本次工作改到的代码 + 相关 spec 文档 + 本次实际更新过的 CONTEXT.md / ADR / req doc + 本次实际更新过的 roadmap items.yaml / 主文档
 - **不该进**：和本次工作无关的顺手修改；属于"下次另起 feature / issue"的扩大范围
 - **提交前确认**：用户没明确同意不要 `git commit`
-- **Goal commit 授权**：Epic 自动逐 feature 提交必须有独立 `approval-report.md#goal-commits`；design/acceptance 授权都不能替代
+- **Goal commit 授权**：Epic 自动逐 feature 提交必须有独立 `approval-report.md#goal-commits`；它可与 `goal-acceptance` 在同一次 Goal 启动确认中原子批准，但两份 ref 仍分别核验，design 确认或 acceptance ref 都不能替代 commit ref
 - **commit message**：一句话说清"做了什么"，不贴 spec 目录路径
 
 子技能只描述本阶段特有提交范围，通用规则看这里。

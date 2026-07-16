@@ -179,17 +179,25 @@ def write_roadmap_goal_state(
     roadmap: Path,
     *,
     feature_slug: str = "api-seed",
+    status: str = "ready-to-dispatch",
+    driver_kind: str = "host-agent",
+    driver_id: str = "epic-run-123",
     acceptance_authorization: str | None = "approved",
     approval_decision_status: str | None = "approved",
     commit_authorization: str | None = "approved",
     commit_decision_status: str | None = "approved",
+    execution_confirmation_id: str | None = None,
+    approval_group_status: str | None = None,
+    approval_group_confirmation_id: str = "",
 ) -> None:
     lines = [
         "roadmap: billing-system",
-        "status: ready-to-dispatch",
-        "driver_kind: host-agent",
-        'driver_id: "epic-run-123"',
+        f"status: {status}",
+        f"driver_kind: {driver_kind}",
+        f'driver_id: "{driver_id}"',
     ]
+    if execution_confirmation_id is not None:
+        lines.append(f'execution_confirmation_id: "{execution_confirmation_id}"')
     if acceptance_authorization is not None:
         lines.extend(
             [
@@ -216,16 +224,33 @@ def write_roadmap_goal_state(
     )
     write(roadmap / "goal-state.yaml", "\n".join(lines) + "\n")
     approval_rows = []
-    if acceptance_authorization == "approved" and approval_decision_status is not None:
+    if approval_decision_status is not None:
         approval_rows.append(f"  goal-acceptance: {approval_decision_status}")
-    if commit_authorization == "approved" and commit_decision_status is not None:
+    if commit_decision_status is not None:
         approval_rows.append(f"  goal-commits: {commit_decision_status}")
-    if approval_rows:
+    if approval_rows or approval_group_status is not None:
+        approvals = (
+            "approvals: {}\n"
+            if not approval_rows
+            else "approvals:\n" + "\n".join(approval_rows) + "\n"
+        )
+        approval_group = ""
+        if approval_group_status is not None:
+            approval_group = (
+                "approval_groups:\n"
+                "  goal-execution:\n"
+                f"    status: {approval_group_status}\n"
+                f'    confirmation_id: "{approval_group_confirmation_id}"\n'
+                "    decisions:\n"
+                "      - goal-acceptance\n"
+                "      - goal-commits\n"
+            )
         write(
             roadmap / "approval-report.md",
-            "---\ndoc_type: approval-report\nstatus: approved\napprovals:\n"
-            + "\n".join(approval_rows)
-            + "\n---\n# Approval\n",
+            "---\ndoc_type: approval-report\nstatus: approved\n"
+            + approvals
+            + approval_group
+            + "---\n# Approval\n",
         )
 
 
@@ -1699,7 +1724,7 @@ def test_feature_goal_state_validates_acceptance_approval_artifact(
 @pytest.mark.parametrize(
     ("authorization", "expected_status", "expected_action"),
     [
-        (None, "user_gate", "authorize-epic-goal-acceptance"),
+        (None, "user_gate", "authorize-epic-goal-execution"),
         ("rejected", "handoff", "CS_ROADMAP_GOAL_HANDOFF"),
     ],
 )
@@ -1721,6 +1746,238 @@ def test_epic_goal_state_requires_explicit_acceptance_authorization(
     assert result["next_action"] == expected_action
 
 
+def test_epic_pending_package_template_stops_at_single_execution_gate(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path)
+    roadmap = write_roadmap(repo)
+    write_feature(repo, "api-seed", design_status="approved", include_roadmap=True)
+    write_feature(repo, "ui-seed", design_status="approved", include_roadmap=True)
+    write_roadmap_goal_state(
+        roadmap,
+        status="awaiting-authorization",
+        driver_kind="none",
+        driver_id="",
+        acceptance_authorization="pending",
+        approval_decision_status="pending",
+        commit_authorization="pending",
+        commit_decision_status="pending",
+        execution_confirmation_id="",
+        approval_group_status="pending",
+    )
+
+    result = workflow_next.epic_next(roadmap)
+
+    assert result["status"] == "user_gate"
+    assert result["next_action"] == "authorize-epic-goal-execution"
+    assert "approval group goal-execution is not approved" in result["reason"]
+    assert "acceptance_authorization is not approved" in result["reason"]
+    assert "commit_authorization is not approved" in result["reason"]
+    assert result["evidence"]["acceptance_authorization_ref"] == "approval-report.md#goal-acceptance"
+    assert result["evidence"]["commit_authorization_ref"] == "approval-report.md#goal-commits"
+
+
+@pytest.mark.parametrize(
+    ("acceptance", "commit", "state_confirmation_id", "status", "reason"),
+    [
+        ("pending", "pending", "", "awaiting-authorization", "not synchronized"),
+        (
+            "approved",
+            "pending",
+            "goal-confirm-1",
+            "ready-to-dispatch",
+            "commit_authorization",
+        ),
+        ("approved", "approved", "", "ready-to-dispatch", "not synchronized"),
+        ("approved", "approved", "other-confirmation", "ready-to-dispatch", "not synchronized"),
+        ("approved", "approved", "goal-confirm-1", "awaiting-authorization", "still awaits"),
+        ("rejected", "approved", "goal-confirm-1", "ready-to-dispatch", "projection is rejected"),
+    ],
+)
+def test_epic_durable_execution_confirmation_repairs_partial_goal_state_without_user_gate(
+    tmp_path: Path,
+    acceptance: str,
+    commit: str,
+    state_confirmation_id: str,
+    status: str,
+    reason: str,
+) -> None:
+    repo = init_repo(tmp_path)
+    roadmap = write_roadmap(repo)
+    write_feature(repo, "api-seed", design_status="approved", include_roadmap=True)
+    write_feature(repo, "ui-seed", design_status="approved", include_roadmap=True)
+    write_roadmap_goal_state(
+        roadmap,
+        status=status,
+        driver_kind="none",
+        driver_id="",
+        acceptance_authorization=acceptance,
+        commit_authorization=commit,
+        execution_confirmation_id=state_confirmation_id,
+        approval_group_status="approved",
+        approval_group_confirmation_id="goal-confirm-1",
+    )
+
+    result = workflow_next.epic_next(roadmap)
+
+    assert result["status"] == "continue"
+    assert result["next_action"] == "repair-epic-goal-execution-authorization"
+    assert reason in result["reason"]
+    assert result["must_continue"] is True
+    assert result["final_answer_allowed"] is False
+    assert result["evidence"]["execution_confirmation_id"] == "goal-confirm-1"
+    assert result["evidence"]["acceptance_authorization"] == "approved"
+    assert result["evidence"]["commit_authorization"] == "approved"
+
+
+def test_epic_repaired_execution_confirmation_dispatches_without_another_user_gate(
+    tmp_path: Path,
+) -> None:
+    repo = init_repo(tmp_path)
+    roadmap = write_roadmap(repo)
+    write_feature(repo, "api-seed", design_status="approved", include_roadmap=True)
+    write_feature(repo, "ui-seed", design_status="approved", include_roadmap=True)
+    write_roadmap_goal_state(
+        roadmap,
+        driver_kind="none",
+        driver_id="",
+        execution_confirmation_id="goal-confirm-1",
+        approval_group_status="approved",
+        approval_group_confirmation_id="goal-confirm-1",
+    )
+
+    result = workflow_next.epic_next(roadmap)
+
+    assert result["status"] == "dispatch_goal"
+    assert result["next_action"] == "dispatch-epic-goal-driver-or-print-goal"
+    assert result["evidence"]["execution_confirmation_id"] == "goal-confirm-1"
+
+
+def test_epic_pending_execution_group_cannot_be_bypassed_by_state_first_updates(
+    tmp_path: Path,
+) -> None:
+    repo = init_repo(tmp_path)
+    roadmap = write_roadmap(repo)
+    write_feature(repo, "api-seed", design_status="approved", include_roadmap=True)
+    write_feature(repo, "ui-seed", design_status="approved", include_roadmap=True)
+    write_roadmap_goal_state(
+        roadmap,
+        execution_confirmation_id="goal-confirm-1",
+        approval_group_status="pending",
+        approval_group_confirmation_id="goal-confirm-1",
+    )
+
+    result = workflow_next.epic_next(roadmap)
+
+    assert result["status"] == "user_gate"
+    assert result["next_action"] == "authorize-epic-goal-execution"
+    assert "approval group goal-execution is not approved" in result["reason"]
+
+
+def test_epic_rejected_execution_group_handoffs(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path)
+    roadmap = write_roadmap(repo)
+    write_feature(repo, "api-seed", design_status="approved", include_roadmap=True)
+    write_feature(repo, "ui-seed", design_status="approved", include_roadmap=True)
+    write_roadmap_goal_state(
+        roadmap,
+        execution_confirmation_id="goal-confirm-1",
+        approval_group_status="rejected",
+        approval_group_confirmation_id="goal-confirm-1",
+    )
+
+    result = workflow_next.epic_next(roadmap)
+
+    assert result["status"] == "handoff"
+    assert result["next_action"] == "CS_ROADMAP_GOAL_HANDOFF"
+
+
+def test_epic_legacy_approved_authorizations_dispatch_with_warning(
+    tmp_path: Path,
+) -> None:
+    repo = init_repo(tmp_path)
+    roadmap = write_roadmap(repo)
+    write_feature(repo, "api-seed", design_status="approved", include_roadmap=True)
+    write_feature(repo, "ui-seed", design_status="approved", include_roadmap=True)
+    write_roadmap_goal_state(roadmap, driver_kind="none", driver_id="")
+
+    result = workflow_next.epic_next(roadmap)
+
+    assert result["status"] == "dispatch_goal"
+    assert "legacy epic goal approvals" in result["warnings"][-1]
+
+
+def test_epic_new_state_without_execution_group_cannot_use_legacy_bypass(
+    tmp_path: Path,
+) -> None:
+    repo = init_repo(tmp_path)
+    roadmap = write_roadmap(repo)
+    write_feature(repo, "api-seed", design_status="approved", include_roadmap=True)
+    write_feature(repo, "ui-seed", design_status="approved", include_roadmap=True)
+    write_roadmap_goal_state(
+        roadmap,
+        driver_kind="none",
+        driver_id="",
+        execution_confirmation_id="",
+    )
+
+    result = workflow_next.epic_next(roadmap)
+
+    assert result["status"] == "user_gate"
+    assert result["next_action"] == "authorize-epic-goal-execution"
+
+
+def test_epic_approved_execution_group_without_confirmation_id_does_not_repair(
+    tmp_path: Path,
+) -> None:
+    repo = init_repo(tmp_path)
+    roadmap = write_roadmap(repo)
+    write_feature(repo, "api-seed", design_status="approved", include_roadmap=True)
+    write_feature(repo, "ui-seed", design_status="approved", include_roadmap=True)
+    write_roadmap_goal_state(
+        roadmap,
+        driver_kind="none",
+        driver_id="",
+        execution_confirmation_id="",
+        approval_group_status="approved",
+        approval_group_confirmation_id="",
+    )
+
+    result = workflow_next.epic_next(roadmap)
+
+    assert result["status"] == "user_gate"
+    assert result["next_action"] == "authorize-epic-goal-execution"
+    assert result["next_action"] != "repair-epic-goal-execution-authorization"
+    assert "approval group goal-execution has no confirmation_id" in result["reason"]
+
+
+def test_epic_external_approval_symlink_fails_closed_instead_of_repair_loop(
+    tmp_path: Path,
+) -> None:
+    repo = init_repo(tmp_path)
+    roadmap = write_roadmap(repo)
+    write_feature(repo, "api-seed", design_status="approved", include_roadmap=True)
+    write_feature(repo, "ui-seed", design_status="approved", include_roadmap=True)
+    write_roadmap_goal_state(
+        roadmap,
+        driver_kind="none",
+        driver_id="",
+        execution_confirmation_id="goal-confirm-1",
+        approval_group_status="approved",
+        approval_group_confirmation_id="goal-confirm-1",
+    )
+    approval = roadmap / "approval-report.md"
+    external = tmp_path / "external-approval-report.md"
+    external.write_text(approval.read_text(encoding="utf-8"), encoding="utf-8")
+    approval.unlink()
+    approval.symlink_to(external)
+
+    result = workflow_next.epic_next(roadmap)
+
+    assert result["status"] == "user_gate"
+    assert result["next_action"] == "authorize-epic-goal-execution"
+    assert result["next_action"] != "repair-epic-goal-execution-authorization"
+    assert "approval-report.md escapes the workflow unit" in result["reason"]
+
+
 def test_epic_legacy_complete_goal_state_still_requires_acceptance_authorization(
     tmp_path: Path,
 ) -> None:
@@ -1733,7 +1990,7 @@ def test_epic_legacy_complete_goal_state_still_requires_acceptance_authorization
     result = workflow_next.epic_next(roadmap)
 
     assert result["status"] == "user_gate"
-    assert result["next_action"] == "authorize-epic-goal-acceptance"
+    assert result["next_action"] == "authorize-epic-goal-execution"
 
 
 def test_epic_goal_state_rejects_unverifiable_acceptance_approval_ref(tmp_path: Path) -> None:
@@ -1750,15 +2007,15 @@ def test_epic_goal_state_rejects_unverifiable_acceptance_approval_ref(tmp_path: 
     result = workflow_next.epic_next(roadmap)
 
     assert result["status"] == "user_gate"
-    assert result["next_action"] == "authorize-epic-goal-acceptance"
+    assert result["next_action"] == "authorize-epic-goal-execution"
     assert "unit approval-report.md" in result["reason"]
 
 
 @pytest.mark.parametrize(
     ("authorization", "expected_status", "expected_action"),
     [
-        (None, "user_gate", "authorize-epic-goal-commits"),
-        ("Approved", "user_gate", "authorize-epic-goal-commits"),
+        (None, "user_gate", "authorize-epic-goal-execution"),
+        ("Approved", "user_gate", "authorize-epic-goal-execution"),
         ("rejected", "handoff", "CS_ROADMAP_GOAL_HANDOFF"),
     ],
 )
@@ -1790,7 +2047,7 @@ def test_epic_complete_state_still_requires_commit_authorization(tmp_path: Path)
     result = workflow_next.epic_next(roadmap)
 
     assert result["status"] == "user_gate"
-    assert result["next_action"] == "authorize-epic-goal-commits"
+    assert result["next_action"] == "authorize-epic-goal-execution"
 
 
 def test_epic_goal_state_rejects_unapproved_commit_decision(tmp_path: Path) -> None:
@@ -1807,7 +2064,7 @@ def test_epic_goal_state_rejects_unapproved_commit_decision(tmp_path: Path) -> N
     result = workflow_next.epic_next(roadmap)
 
     assert result["status"] == "user_gate"
-    assert result["next_action"] == "authorize-epic-goal-commits"
+    assert result["next_action"] == "authorize-epic-goal-execution"
     assert "goal-commits is not approved" in result["reason"]
 
 
@@ -1836,7 +2093,7 @@ def test_epic_goal_state_rejects_unverifiable_commit_approval_ref(
     result = workflow_next.epic_next(roadmap)
 
     assert result["status"] == "user_gate"
-    assert result["next_action"] == "authorize-epic-goal-commits"
+    assert result["next_action"] == "authorize-epic-goal-execution"
     assert reason in result["reason"]
 
 
