@@ -36,6 +36,14 @@ Claude plugin marketplace:
 /plugin install codestable@codestable
 ```
 
+Cursor Team Marketplace (Teams / Enterprise):
+
+1. A team administrator opens **Dashboard -> Plugins** and selects **Add Marketplace** under **Team Marketplaces**.
+2. Select **Import from Repo**, import `https://github.com/joseph-bing-han/CodeStable`, then use **Add to Marketplace** to add `codestable`.
+3. Configure marketplace access and the installation mode under **Marketplace Settings**. Developers can then install or manage the plugin from **Customize** in the sidebar.
+
+This is the current repository-based Cursor distribution path; it does not mean CodeStable is published in the public Cursor Marketplace. See the official [Cursor Plugins documentation](https://cursor.com/docs/plugins).
+
 `skills` CLI:
 
 ```bash
@@ -71,6 +79,14 @@ Claude plugin marketplace:
 ```
 
 Restart Claude Code after updating so the new plugin version is applied.
+
+Cursor Team Marketplace:
+
+- Turn on **Enable Auto Refresh** under **Marketplace Settings** to re-index updates after changes are pushed to the tracked branch. This mode requires the Cursor GitHub App on the repository.
+- Without automatic refresh, a team administrator can click **Refresh** under **Dashboard -> Plugins** to re-index manually.
+- After a refresh, developers view and manage installed plugins from **Customize** in the sidebar. A brand-new plugin added to the repository is not discovered automatically until the repository URL is imported again; ordinary updates to this repository's existing `codestable` entry do not require a new plugin entry.
+
+Cursor documents that rapid pushes are batched and a marketplace is re-indexed at most once every 10 minutes, so a short delay after a repository update should not be treated as a failed refresh. See the official [Cursor Plugins documentation](https://cursor.com/docs/plugins).
 
 `skills` CLI:
 

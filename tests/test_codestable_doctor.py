@@ -194,6 +194,74 @@ def test_runtime_sync_removes_target_only_managed_asset_and_restores_health(tmp_
     assert not target.exists()
 
 
+def test_runtime_sync_removes_untracked_target_only_managed_asset(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path)
+    target = repo / ".codestable/reference/obsolete-untracked-managed.md"
+    target.write_text("stale package asset\n", encoding="utf-8")
+    source = ROOT / "plugins/codestable/skills/cs-onboard"
+
+    before = runtime_tool.runtime_health(
+        repo,
+        source_skill_dir=source,
+        plugin_version=CURRENT_PLUGIN_VERSION,
+    )
+    result = runtime_tool.sync_runtime(repo, source)
+
+    expected_path = ".codestable/reference/obsolete-untracked-managed.md"
+    assert before["status"] == "runtime-drift"
+    assert before["drifted_paths"] == [expected_path]
+    assert result["ok"] is True
+    assert result["removed_paths"] == [expected_path]
+    assert result["health"]["status"] == "ok"
+    assert not target.exists()
+
+
+def test_runtime_sync_blocks_staged_target_only_managed_asset(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path)
+    target = repo / ".codestable/reference/staged-target-only.md"
+    target.write_text("user staged content\n", encoding="utf-8")
+    run(repo, "add", target.relative_to(repo).as_posix())
+    source = ROOT / "plugins/codestable/skills/cs-onboard"
+
+    result = runtime_tool.sync_runtime(repo, source)
+
+    assert result["ok"] is False
+    assert result["status"] == "managed-paths-dirty"
+    assert result["dirty_paths"] == [".codestable/reference/staged-target-only.md"]
+    assert target.read_text(encoding="utf-8") == "user staged content\n"
+
+
+def test_runtime_sync_blocks_modified_tracked_target_only_managed_asset(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path)
+    target = repo / ".codestable/reference/modified-target-only.md"
+    target.write_text("package-owned content\n", encoding="utf-8")
+    run(repo, "add", target.relative_to(repo).as_posix())
+    run(repo, "commit", "-m", "add target-only runtime asset")
+    target.write_text("user modified content\n", encoding="utf-8")
+    source = ROOT / "plugins/codestable/skills/cs-onboard"
+
+    result = runtime_tool.sync_runtime(repo, source)
+
+    assert result["ok"] is False
+    assert result["status"] == "managed-paths-dirty"
+    assert result["dirty_paths"] == [".codestable/reference/modified-target-only.md"]
+    assert target.read_text(encoding="utf-8") == "user modified content\n"
+
+
+def test_runtime_sync_blocks_dirty_source_backed_managed_asset(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path)
+    target = repo / ".codestable/reference/agent-conventions.md"
+    target.write_text("user modified source-backed content\n", encoding="utf-8")
+    source = ROOT / "plugins/codestable/skills/cs-onboard"
+
+    result = runtime_tool.sync_runtime(repo, source)
+
+    assert result["ok"] is False
+    assert result["status"] == "managed-paths-dirty"
+    assert result["dirty_paths"] == [".codestable/reference/agent-conventions.md"]
+    assert target.read_text(encoding="utf-8") == "user modified source-backed content\n"
+
+
 def test_nested_legacy_filename_is_not_runtime_allowlisted(tmp_path: Path) -> None:
     repo = init_repo(tmp_path)
     target = repo / ".codestable/reference/nested/worktree-conventions.md"

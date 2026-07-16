@@ -38,6 +38,14 @@ Claude plugin marketplace：
 /plugin install codestable@codestable
 ```
 
+Cursor Team Marketplace（Teams / Enterprise）：
+
+1. 团队管理员打开 **Dashboard -> Plugins**，在 **Team Marketplaces** 中选择 **Add Marketplace**。
+2. 选择 **Import from Repo**，导入 `https://github.com/joseph-bing-han/CodeStable`，再用 **Add to Marketplace** 添加 `codestable`。
+3. 在 **Marketplace Settings** 中配置访问范围与安装模式；开发者随后从侧边栏 **Customize** 安装或管理插件。
+
+这是当前仓库型 Cursor 分发入口，不代表 CodeStable 已发布到公开 Cursor Marketplace。官方流程见 [Cursor Plugins 文档](https://cursor.com/docs/plugins)。
+
 `skills` CLI：
 
 ```bash
@@ -73,6 +81,14 @@ Claude plugin marketplace：
 ```
 
 Claude 更新后需要重启 Claude Code 才会应用新版插件。
+
+Cursor Team Marketplace：
+
+- 在 **Marketplace Settings** 中开启 **Enable Auto Refresh**，可在跟踪分支更新后自动重新索引；该模式需要仓库安装 Cursor GitHub App。
+- 未开启自动刷新时，由团队管理员在 **Dashboard -> Plugins** 中点击 **Refresh** 手动重新索引。
+- 刷新后，开发者从侧边栏 **Customize** 查看和管理已安装插件。新增到仓库但尚未加入 marketplace 的全新插件不会被自动发现，需要重新导入仓库 URL；本仓库现有 `codestable` 条目的普通版本更新不需要新增插件条目。
+
+Cursor 官方说明会将快速连续 push 合并，并且最多每 10 分钟重新索引一次；因此仓库更新后不应把短暂延迟误判为版本未刷新。详见 [Cursor Plugins 文档](https://cursor.com/docs/plugins)。
 
 `skills` CLI：
 

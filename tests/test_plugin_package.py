@@ -105,6 +105,11 @@ def make_repo(tmp_path: Path) -> Path:
                     "codex plugin marketplace upgrade codestable",
                     "/plugin marketplace update",
                     "/plugin update codestable@codestable",
+                    "https://cursor.com/docs/plugins",
+                    "Dashboard -> Plugins",
+                    "Import from Repo",
+                    "Enable Auto Refresh",
+                    "Customize",
                     "npx skills@latest add codestable/CodeStable/plugins/codestable",
                     "npx skills@latest add codestable/CodeStable/plugins/codestable --skill '*' -g",
                     "",
@@ -165,6 +170,21 @@ def test_source_plugin_manifests_must_not_register_agent_mcp(tmp_path: Path) -> 
     findings = checker.check_repo(repo)
 
     assert sum("source plugin manifest must remain skills-only" in message for message in messages(findings)) == 3
+
+
+def test_cursor_manifest_must_not_register_agents_or_hooks(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest_path = repo / "plugins/codestable/.cursor-plugin/plugin.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["agents"] = ["./agents/reviewer.md"]
+    manifest["hooks"] = {"beforeSubmitPrompt": ["./hooks/reviewer.py"]}
+    write_json(manifest_path, manifest)
+
+    findings = checker.check_repo(repo)
+    finding_messages = messages(findings)
+
+    assert "source plugin manifest must remain skills-only; agent registration is not part of this package" in finding_messages
+    assert "source plugin manifest must remain skills-only; hook registration is not part of this package" in finding_messages
 
 
 def test_missing_version_fails(tmp_path: Path) -> None:
@@ -243,6 +263,88 @@ def test_claude_marketplace_source_contract_fails(tmp_path: Path) -> None:
     assert "owner.name must equal 'CodeStable'" in finding_messages
     assert any("description must equal" in message for message in finding_messages)
     assert any("source must equal './plugins/codestable'" in message for message in finding_messages)
+
+
+def test_cursor_marketplace_entry_name_must_match_plugin_identity(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    marketplace_path = repo / ".cursor-plugin/marketplace.json"
+    marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+    marketplace["plugins"][0]["name"] = "other-plugin"
+    write_json(marketplace_path, marketplace)
+
+    findings = checker.check_repo(repo)
+
+    assert any(
+        finding.path == ".cursor-plugin/marketplace.json"
+        and finding.message == "plugins.0.name must equal 'codestable'"
+        for finding in findings
+    )
+    assert any(
+        "plugins.0.name must equal the referenced Cursor plugin manifest name" in finding.message
+        for finding in findings
+    )
+
+
+def test_cursor_plugin_manifest_name_must_match_marketplace_identity(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest_path = repo / "plugins/codestable/.cursor-plugin/plugin.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["name"] = "other-plugin"
+    write_json(manifest_path, manifest)
+
+    findings = checker.check_repo(repo)
+
+    assert any(
+        finding.path == "plugins/codestable/.cursor-plugin/plugin.json"
+        and finding.message == "name must equal 'codestable'"
+        for finding in findings
+    )
+    assert any(
+        "plugins.0.name must equal the referenced Cursor plugin manifest name" in finding.message
+        for finding in findings
+    )
+
+
+def test_cursor_marketplace_source_directory_must_exist(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    marketplace_path = repo / ".cursor-plugin/marketplace.json"
+    marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+    marketplace["plugins"][0]["source"] = "plugins/missing"
+    write_json(marketplace_path, marketplace)
+
+    findings = checker.check_repo(repo)
+
+    assert any("plugins.0.source must equal 'plugins/codestable'" in finding.message for finding in findings)
+    assert any("plugins.0.source directory is missing: plugins/missing" in finding.message for finding in findings)
+
+
+def test_cursor_marketplace_source_must_contain_plugin_manifest(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    (repo / "plugins/codestable/.cursor-plugin/plugin.json").unlink()
+
+    findings = checker.check_repo(repo)
+
+    assert any(
+        finding.path == "plugins/codestable/.cursor-plugin/plugin.json"
+        and finding.message == "file is missing"
+        for finding in findings
+    )
+
+
+def test_cursor_plugin_version_must_match_root_version(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest_path = repo / "plugins/codestable/.cursor-plugin/plugin.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["version"] = "0.2.0"
+    write_json(manifest_path, manifest)
+
+    findings = checker.check_repo(repo)
+
+    assert any(
+        finding.path == "plugins/codestable/.cursor-plugin/plugin.json"
+        and finding.message == "version must equal VERSION"
+        for finding in findings
+    )
 
 
 def test_manifest_version_mismatch_fails(tmp_path: Path) -> None:
@@ -388,6 +490,21 @@ def test_readme_commands_stay_current(tmp_path: Path) -> None:
 
     assert "obsolete documented command: codex plugin install codestable" in finding_messages
     assert any("missing documented command: codex plugin add codestable@codestable" in message for message in finding_messages)
+
+
+def test_readme_requires_cursor_install_and_update_entrypoints(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    for filename in ("README.md", "README.en.md"):
+        path = repo / filename
+        text = path.read_text(encoding="utf-8")
+        text = text.replace("Dashboard -> Plugins\n", "")
+        text = text.replace("Enable Auto Refresh\n", "")
+        path.write_text(text, encoding="utf-8")
+
+    findings = checker.check_repo(repo)
+
+    assert sum("missing documented command: Dashboard -> Plugins" in finding.message for finding in findings) == 2
+    assert sum("missing documented command: Enable Auto Refresh" in finding.message for finding in findings) == 2
 
 
 def test_readme_rejects_unqualified_claude_update_command(tmp_path: Path) -> None:
