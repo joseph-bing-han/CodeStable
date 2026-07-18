@@ -45,7 +45,7 @@
 
 首次 design review 必须优先启动独立 Task agent reviewer。修订后先分类：行为、公开契约、架构边界、验收语义或范围发生**实质变化**时，启动新的完整独立复审；只改文字、编号、链接、格式，或修正不改变上述契约的映射时走 `focused closure`，由主 agent 核对本轮可归因 diff、目标校验和原 finding，追加 closure evidence，不启动新 reviewer、不增加 round。无法确定分类、跨会话无法归因修改，或修订夹带实现/范围变化时，fail-closed 做完整独立复审。
 
-完整独立审查一旦应该启动或已经启动，reviewer 就是 gate 输入；返回前不能定稿 `passed`。focused closure 只适用于首次独立 reviewer 已完成且原 finding 可窄验证的同一修订链，不得借它绕过首次审查或关闭实质 finding。运行时确实没有 Task agent 能力时，仍须 approval-report + 用户明确授权才可降级。
+完整独立审查一旦应该启动或已经启动，reviewer 就是 gate 输入；返回前不能定稿 `passed`。focused closure 只适用于首次独立 reviewer 已完成且原 finding 可窄验证的同一修订链，不得借它绕过首次审查或关闭实质 finding。运行时确实没有 Task agent 能力时，优先写 `blocked`；owner 按 `approval-conventions.md` 显式授权 `ApproveLocalOnly` 后可用当前主模型最高档 local review。
 
 backend、配置、只读 mode、降级与生命周期只由
 `.codestable/reference/agent-conventions.md` 定义；本协议不得重定义选择链。
@@ -60,7 +60,7 @@ designVerdict decision findings = reviewVerdict (toReviewLane decision) findings
 ```
 
 `designReview` 只用于首次或实质变化后的完整复审；focused closure 不调用它，也不增加 round。`review_state/review_reason/reviewer_id` 是跨会话恢复的机器真相。
-`Launch` 只启动一次 reviewer；`Await ref` 必须把同一 `ref` 写入 `reviewer_id`，与 `NeedOwnerApproval`、运行失败、hard block 分别持久化为 `awaiting-reviewer`、`needs-owner-approval`、`reviewer-failed`、`blocked`；`LocalReview` 仅来自 `ApproveLocalOnly`，只有 `MergeVerified` / `LocalReview` 可进入本地核验。
+`Launch` 只启动一次 reviewer；`Await ref` 必须把同一 `ref` 写入 `reviewer_id`，运行失败或 hard block 分别持久化为 `reviewer-failed`、`blocked`；只有 `MergeVerified` 可进入本地事实核验。
 
 独立 Task agent reviewer prompt 必须只给原始材料和边界，不透露本地 review 结论：
 
@@ -99,12 +99,11 @@ designVerdict decision findings = reviewVerdict (toReviewLane decision) findings
 
 ### 2. 独立审查合并
 
-- 记录 `heterogeneous-agent` / `independent-agent` / `local-only` 与 agent id、状态。
-- 最终 verdict 必须等 `reviewGate` 返回 `MergeVerified` 或 `LocalReview`。
+- 记录 `heterogeneous-agent` / `independent-agent` 与 agent id、状态。
+- 最终 verdict 必须等 `reviewGate` 返回 `MergeVerified`。
 - reviewer 返回后逐条做本地事实核验；能用 design / checklist / 文档 / 代码证据支撑才合并。
 - reviewer 结果合并进 `{slug}-design-review.md` 后，按 Task agent 生命周期关闭该 reviewer。
-- `NeedOwnerApproval` 写 `status: blocked` 并记录 pending approval；其他未放行状态同样 blocked，
-  不静默降级。
+- 所有未放行状态都写 `status: blocked`；owner approval 只能记录风险接受，不能降级。
 
 ### 3. 方案审查
 
@@ -184,12 +183,12 @@ round: 1
 
 ### Independent Review
 
-- Status: not-available|skipped-by-user|local-only|pending|completed|failed|blocked
-- Detection: heterogeneous-agent|independent-agent|local-only|skipped
+- Status: not-available|skipped-by-user|pending|completed|failed|blocked
+- Detection: heterogeneous-agent|independent-agent|skipped
 - Provider / agent: {resolved config / agent id / none}
 - Raw output: {摘要 / 路径 / none}
 - Merge policy: {已逐条核验 / 未启用原因 / pending 时不得定稿}
-- Gate effect: {none | blocks final verdict until completed / user-approved downgrade}
+- Gate effect: {none | blocks final verdict until completed}
 
 ## 2. Design Summary
 
@@ -256,7 +255,7 @@ Summary: E={n}, C={n}, H={n}, H-only core checks={列表或 none}。
 ## 7. Verdict
 
 - Status: passed|changes-requested|blocked
-- Next: 交给用户整体 review | 回 `cs-feat` design 阶段 修订后重跑 `cs-feat` design-review 阶段 | 等独立 Task agent reviewer 完成 / 用户确认降级后重跑
+- Next: 交给用户整体 review | 回 `cs-feat` design 阶段修订后重跑 `cs-feat` design-review 阶段 | 等独立 Task agent reviewer 完成或恢复可用能力后重跑
 
 ## 8. Focused Closure（无则写 none）
 
@@ -289,7 +288,7 @@ Summary: E={n}, C={n}, H={n}, H-only core checks={列表或 none}。
 - roadmap 起头时不检查接口契约，导致 feature 偷偷绕开 roadmap。
 - 现状段没读代码就放过，implement 阶段才发现设计站不住。
 - steps 出现"和 / 以及 / 同时"却不复查是否该拆。
-- 把批量 design 或赶时间当成 local-only 降级理由。
+- 把批量 design、赶时间或 owner 风险接受当成独立 reviewer 降级理由。
 - 启动独立 Task agent reviewer 后结果还没回来，就把本地 review 定稿为 passed。
 - 外部 reviewer 的结论没经本地事实核验就照抄。
 - review 报告没有落盘，导致用户 review 和后续实现没有可追溯输入。

@@ -155,6 +155,48 @@ def test_runtime_manifest_without_version_is_treated_as_needing_sync(tmp_path: P
     assert "runtime sync" in runtime["hint"]
 
 
+def test_runtime_version_discovery_rejects_invalid_version_metadata(tmp_path: Path) -> None:
+    source = tmp_path / "cs-onboard"
+    source.mkdir()
+
+    for invalid_version in ("unknown", "1.0", "version-1.0.0", "1.0.0 trailing"):
+        (source / "VERSION").write_text(invalid_version, encoding="utf-8")
+        assert runtime_tool.discover_plugin_version(source) is None
+
+
+def test_runtime_version_discovery_does_not_mask_invalid_standalone_version(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "plugin/skills/cs-onboard"
+    source.mkdir(parents=True)
+    (source / "VERSION").write_text("1.0.0-01\n", encoding="utf-8")
+    plugin_manifest = source.parents[1] / ".codex-plugin/plugin.json"
+    plugin_manifest.parent.mkdir()
+    plugin_manifest.write_text('{"version":"1.2.3"}\n', encoding="utf-8")
+
+    assert runtime_tool.discover_plugin_version(source) is None
+
+
+def test_runtime_version_discovery_does_not_fallback_past_invalid_ancestor_version(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "plugin/skills/cs-onboard"
+    source.mkdir(parents=True)
+    nearest_ancestor = source.parents[1]
+    (nearest_ancestor / "VERSION").write_text("unknown\n", encoding="utf-8")
+    (tmp_path / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+
+    assert runtime_tool.discover_plugin_version(source) is None
+
+
+def test_runtime_version_discovery_accepts_semver_version_metadata(tmp_path: Path) -> None:
+    source = tmp_path / "cs-onboard"
+    source.mkdir()
+    (source / "VERSION").write_text("1.2.3-rc.1+build.7\n", encoding="utf-8")
+
+    assert runtime_tool.discover_plugin_version(source) == "1.2.3-rc.1+build.7"
+
+
 def test_runtime_health_detects_template_drift_at_same_version(tmp_path: Path) -> None:
     repo = init_repo(tmp_path)
     target = repo / ".codestable/reference/agent-conventions.md"

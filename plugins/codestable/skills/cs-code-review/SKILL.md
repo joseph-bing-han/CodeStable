@@ -22,9 +22,9 @@ contracts:
 
 本次调用参数：$ARGUMENTS。参数非空且不是字面 `$ARGUMENTS` 时解析 `--range <git-range>` 和 scope；无参数默认行为是从 active Task、来源产物与当前 diff 恢复审查范围。
 
-本技能是横切代码审查 gate：任何写入型 workflow 的完整实现批次结束后、commit / QA / acceptance / Task complete 前，必须进行独立只读 review。它只读代码与产物，只写 `{slug}-review.md`；不直接修代码、不更新实现 checklist、不改变 spec。
+本技能是横切代码审查 gate：任何写入型 workflow 的完整实现批次结束后、commit / QA / acceptance / Task complete 前，必须进行只读 review。它只读代码与产物，只写 `{slug}-review.md`；不直接修代码、不更新实现 checklist、不改变 spec。
 
-Review 不依赖 OCR、桌面应用或第三方 review APP。首次审查和实质修改后的完整复审只使用宿主提供的独立 Task agent；能力不可用、启动失败、配置不匹配或结果无法归属时 fail closed，写 `status: blocked` 并停止，不静默降级为 self review。
+Review 不依赖 OCR、桌面应用或第三方 review APP。首次审查和实质修改后的完整复审优先使用宿主提供的独立 Task agent；独立 reviewer 不可用时，用当前主模型最高思考档做 local review 并写 `reviewer: self`。**禁止**用 Explore / Fast / unknown-model 冒充 reviewer。
 
 ## Review 批次边界
 
@@ -147,9 +147,9 @@ Review 前读取：
 
 进入审查前读取 `references/independent-review/protocol.md` 与本 skill 的 `code-reviewer.md` 派发模板。首次 review 和完整复审必须启动一个独立 Task agent，并且只提供原始 spec、Task、diff 与验证证据，不透露主 agent 已形成的结论。
 
-reviewer 的派发顺序、只读 mode 和生命周期由 `.codestable/reference/tools.md` 的 Subagent Runtime Mapping 与 `.codestable/reference/agent-conventions.md` 决定：优先 Cursor 自定义 subagent `codestable-code-reviewer`（该 agent 无 `model:` 字段、依赖继承当前主模型，若 runtime 不能保证继承则退回 bridge 的 model-safe 判定，不直接采信）；不可用时仅在 runtime 能请求当前主模型最高档、或明确保证通用 subagent 继承当前主模型时才用 `readonly generalPurpose` bridge；否则用当前主模型 self review。
+reviewer 的派发顺序、只读 mode 和生命周期由 `.codestable/reference/tools.md` 的 Subagent Runtime Mapping 与 `.codestable/reference/agent-conventions.md` 决定：优先 Cursor 自定义 subagent `codestable-code-reviewer`（应运行在当前主模型最高思考档；agent 定义里的 `model:` 可作为 Cursor 宿主兜底，不改变派发意图）；不可用时仅在 runtime 能请求当前主模型最高档、或明确保证通用 subagent 继承当前主模型时才用 `readonly generalPurpose` bridge；两个 model-safe 条件都不满足时，用**当前主模型最高思考档**做 review，并写 `reviewer: self`。
 
-reviewer 必须运行在**当前对话主模型的最高思考等级**（Opus 4.8 → `max`，`gpt-5.6-sol` → `xhigh`）；`.codestable/attention.md` 显式 pin 了 provider/model 时严格遵守。**禁止**用 `Explore` / `explorer`、Fast 预设、`model: fast` 或 unknown-model bridge 冒充 reviewer——这会把 review 降级到低思考档异构模型；无法保证模型档位时 blocked，不 fallback。
+reviewer 必须运行在**当前对话主模型的最高思考等级**（Opus 4.8 → `max`，`gpt-5.6-sol` → `xhigh`）；`.codestable/attention.md` 显式 pin 了 provider/model 时严格遵守。**禁止**用 `Explore` / `explorer`、Fast 预设、`model: fast` 或 unknown-model bridge 冒充 reviewer——这会把 review 降级到低思考档异构模型；无法保证模型档位时 blocked，不 fallback 到低档模型。
 
 ## 审查方法
 
@@ -173,13 +173,15 @@ reviewer 必须运行在**当前对话主模型的最高思考等级**（Opus 4.
 - `nit` / `suggestion`：不阻塞当前批次；
 - `residual-risk`：review 无法独立证明、交给 QA/acceptance 的风险。
 
-`passed` 必须满足：独立 Task agent 已完成、所有 blocking 清零、important 已修复或有明确 owner 接受的后续归属。新报告的 gate 锚点固定写：
+`passed` 必须满足：全部 blocking 清零、important 已修复或有明确 owner 接受的后续归属。新报告的 reviewer 锚点：
 
 ```yaml
-reviewer: subagent
+reviewer: subagent   # 独立 Task agent / model-safe bridge 完成
+# 或
+reviewer: self       # 当前主模型最高档兜底 review
 ```
 
-历史报告中的 `subagent+ocr` 可作为含独立 Task agent 的旧证据读取，但新流程不得生成该值。没有完成独立 reviewer 时不得写 `passed`。
+历史报告中的 `subagent+ocr` 可作为含独立 Task agent 的旧证据读取，但新流程不得生成该值。Explore/Fast/unknown-model 冒充、或模型档位无法保证时不得写 `passed`。
 
 ## Review-fix 循环
 

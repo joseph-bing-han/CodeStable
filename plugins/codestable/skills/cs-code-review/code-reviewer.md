@@ -6,7 +6,7 @@ Dispatch order (full runtime mapping in `.codestable/reference/tools.md` → Sub
 
 1. Preferred Cursor subagent: use `codestable-code-reviewer` and fill this template.
 2. Native runtime bridge: if the runtime cannot explicitly invoke that custom subagent but does expose a generic `Subagent` tool, read `plugins/codestable/agents/code-reviewer.md`, fill this template, and launch a `readonly: true` `generalPurpose` subagent with the combined message only when the runtime can request the current conversation model at its highest thinking level, or it explicitly guarantees that an unpinned subagent inherits the current parent model.
-3. If neither model-safe bridge condition is true, perform self review with the current main model at its highest thinking level.
+3. If neither model-safe bridge condition is true, perform review with the current main model at its highest thinking level and record `reviewer: self`.
 
 The reviewer must run at the highest thinking level of the current conversation model (Opus 4.8 → `max`, `gpt-5.6-sol` → `xhigh`). Never use `Explore`, `explorer`, a Fast model preset, `model: fast`, or an unknown-model bridge for this review gate; those downgrade the review to a low-budget heterogeneous model and are a fail-closed violation.
 
@@ -58,7 +58,7 @@ You are read-only:
 - Preferred Cursor subagent: `codestable-code-reviewer`
 - Expected reviewer thinking budget: the current conversation model at its highest thinking level (Opus 4.8 → `max`, `gpt-5.6-sol` → `xhigh`), as described by `plugins/codestable/agents/code-reviewer.md`
 - Native bridge executor: readonly `generalPurpose` subagent with `plugins/codestable/agents/code-reviewer.md`
-- Model fallback rule: request the current main model at its highest thinking level when selectable; otherwise use a bridge only when parent-model inheritance is guaranteed; otherwise perform self review with the current main model. Never fall back to Explore / Fast / unknown-model presets.
+- Model fallback rule: request the current main model at its highest thinking level when selectable; otherwise use a bridge only when parent-model inheritance is guaranteed; otherwise perform self review with the current main model at its highest thinking level. Never fall back to Explore, Fast, or unknown-model presets.
 - Review report target: {REVIEW_REPORT_PATH}
 - Task spine: {TASK_SPINE_PATH}
 - Relevant spec files: {SPEC_PATHS}

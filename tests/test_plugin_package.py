@@ -124,6 +124,18 @@ def messages(findings: list[object]) -> list[str]:
     return [finding.message for finding in findings]
 
 
+def test_package_checker_rejects_semver_numeric_leading_zeroes(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    for invalid_version in ("01.0.0", "1.0.0-01"):
+        findings: list[object] = []
+        (repo / "VERSION").write_text(f"{invalid_version}\n", encoding="utf-8")
+
+        checker.check_version(repo, findings)
+
+        assert any("VERSION is not semver" in message for message in messages(findings))
+
+
 def test_valid_plugin_package_passes(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
 
@@ -153,6 +165,70 @@ def test_source_plugin_must_remain_skills_only(tmp_path: Path) -> None:
 
     assert any("source plugin must remain skills-only" in message for message in finding_messages)
     assert any("source plugin must not contain bundled runtime binary" in message for message in finding_messages)
+
+
+def test_package_checker_ignores_local_ignored_root_skill_entry(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    (repo / ".gitignore").write_text(
+        (repo / ".gitignore").read_text(encoding="utf-8") + "/cs-onboard/\n",
+        encoding="utf-8",
+    )
+    local_skill = repo / "cs-onboard"
+    local_skill.mkdir()
+    (local_skill / "SKILL.md").write_text("---\nname: cs-onboard\n---\n", encoding="utf-8")
+
+    findings = checker.check_repo(repo)
+
+    assert all(finding.path != "cs-onboard" for finding in findings)
+
+
+def test_package_checker_allows_root_tools_only_compatibility_directory(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    compatibility_directory = repo / "cs-onboard/tools"
+    compatibility_directory.mkdir(parents=True)
+    (compatibility_directory / "legacy-helper.py").write_text(
+        "print('legacy compatibility helper')\n",
+        encoding="utf-8",
+    )
+
+    findings = checker.check_repo(repo)
+
+    assert all(finding.path != "cs-onboard" for finding in findings)
+
+
+def test_package_checker_rejects_non_tools_root_compatibility_assets(tmp_path: Path) -> None:
+    for asset_name in ("bin", "agents", ".mcp.json"):
+        fixture_root = tmp_path / asset_name.replace(".", "-")
+        fixture_root.mkdir()
+        repo = make_repo(fixture_root)
+        compatibility_directory = repo / "cs-onboard"
+        compatibility_directory.mkdir()
+        forbidden_path = compatibility_directory / asset_name
+        if asset_name.startswith("."):
+            forbidden_path.write_text("{}\n", encoding="utf-8")
+        else:
+            forbidden_path.mkdir()
+
+        findings = checker.check_repo(repo)
+
+        assert any(
+            finding.path == f"cs-onboard/{asset_name}"
+            and finding.message == "root compatibility directory may contain only tools/**"
+            for finding in findings
+        )
+
+
+def test_package_checker_rejects_root_cs_compatibility_regular_file(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    (repo / "cs-foo").write_text("not a tools-only compatibility directory\n", encoding="utf-8")
+
+    findings = checker.check_repo(repo)
+
+    assert any(
+        finding.path == "cs-foo"
+        and finding.message == "root compatibility path must be a tools-only directory"
+        for finding in findings
+    )
 
 
 def test_source_plugin_manifests_must_not_register_agent_mcp(tmp_path: Path) -> None:

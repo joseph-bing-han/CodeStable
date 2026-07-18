@@ -1,9 +1,10 @@
 ---
-doc_type: code-review
-scope_type: issue
+doc_type: issue-review
 issue: 2026-06-29-stage-handoff-auto-continue-regression
-status: approved
-reviewer: self
+status: passed
+reviewer: subagent
+reviewed: 2026-07-18
+round: 2
 related:
   - stage-handoff-auto-continue-regression-report.md
   - stage-handoff-auto-continue-regression-analysis.md

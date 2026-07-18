@@ -2,102 +2,101 @@
 doc_type: feature-review
 feature: 2026-07-16-cursor-plugin-v104-hardening
 status: passed
-reviewer: self
-reviewed: 2026-07-17
-round: 1
-lane_a_state: unavailable
-lane_a_ref: ""
-lane_a_reason: explicit-reviewer-config-unavailable
-lane_b_state: unavailable
-lane_b_ref: ""
-lane_b_reason: ocr-cli-not-installed
+reviewer: subagent
+reviewed: 2026-07-18
+round: 3
+review_basis: independent-readonly-review
 ---
 
-# cursor-plugin-v104-hardening 代码审查报告
+# cursor-plugin-v104-hardening 独立代码审查报告（Round 3）
+
+## Verdict
+
+**passed** — 无 blocking finding，可进入 acceptance。
 
 ## 1. Scope And Inputs
 
-- Design: `.codestable/features/2026-07-16-cursor-plugin-v104-hardening/cursor-plugin-v104-hardening-design.md`
-- Checklist: `.codestable/features/2026-07-16-cursor-plugin-v104-hardening/cursor-plugin-v104-hardening-checklist.yaml`
-- Evidence pack: none（Standard lane）
-- Gate results: none（Standard lane）
-- DoD results: checklist commands 与 implementation report
-- Implementation evidence: `.codestable/features/2026-07-16-cursor-plugin-v104-hardening/cursor-plugin-v104-hardening-implementation.md`
-- Diff basis: 6 个可归因实现文件的 unstaged diff；无 staged diff
-- Review mode: initial
-- Baseline dirty files: 其他 `.codestable/` untracked audits/features/issues/tasks/tools 为既有 baseline，不属于本轮审查范围
+- Design: `cursor-plugin-v104-hardening-design.md`
+- Checklist: `cursor-plugin-v104-hardening-checklist.yaml`
+- QA: `cursor-plugin-v104-hardening-qa.md`（round 2）
+- Approval: `approval-report.md`
+- Req delta: `cursor-plugin-v104-hardening-req-delta.md`
+- Canonical requirement: `.codestable/requirements/plugin-market-distribution.md`
+- Package checker: `tools/check-plugin-package.py`
+- Runtime: `plugins/codestable/skills/cs-onboard/tools/codestable_runtime.py`
+- Reviewer protocol: `cs-code-review/references/independent-review/protocol.md`
+- Agent conventions: `cs-onboard/references/agent-conventions.md`
+- Diff basis: 当前 working tree，覆盖 package checker、runtime SemVer、reviewer fail-closed、root compatibility boundary
 
-### Independent Review
+## 2. 核验结果
 
-- Detection: 项目固定 Paseo reviewer 未暴露；`ocr` CLI 未安装
-- 环节 A 独立隔离 Task agent: unavailable（Paseo `claude-fable-5/high` adapter unavailable）
-- 环节 B OCR CLI: unavailable（`command -v ocr` 非零）
-- OCR severity mapping: High→blocking/important，Medium→nit/suggestion，Low→discarded
-- Merge policy: owner 已批准本轮 `code-review-local-only`（见同目录 approval-report）；主 agent 按完整 spec-fit、对抗式和行级审查 fail-closed 处理 finding，不自动进入 acceptance
-- Gate effect: user-approved downgrade；`reviewer: self`，下游 acceptance 仍需按真实命令证据逐项核验 C1-C13
+### 2.1 Cursor marketplace/plugin identity 一致性
 
-## 2. Diff Summary
+- `.cursor-plugin/marketplace.json` 的 `plugins[0].source` 指向 `plugins/codestable`
+- `plugins/codestable/.cursor-plugin/plugin.json` 的 `name` 为 `codestable`、`version` 为 `1.0.4`
+- `tools/check-plugin-package.py:157-217` 同时校验 marketplace entry、plugin identity、source 可达性、manifest 存在和 skills 路径
+- `tests/test_plugin_package.py` 覆盖 entry name、plugin name、source 和 version 的主要负向场景
+- **结论：通过**
 
-- 新增：本 feature 的 implementation/review 流程产物
-- 修改：`README.md`、`README.en.md`、`tools/check-plugin-package.py`、`tests/test_plugin_package.py`、`plugins/codestable/skills/cs-onboard/tools/codestable_runtime.py`、`tests/test_codestable_doctor.py`
-- 删除：runtime sync 精确移除 untracked `.codestable/reference/workflow-conventions.md`；该路径删除后未形成 Git diff
-- 未跟踪 / staged：feature artifacts 未跟踪；无 staged 文件
-- 风险热点：Cursor source/identity 合同的 fail-closed 语义；Git porcelain dirty 分类；untracked target-only 自动删除边界
+### 2.2 Strict SemVer 与 nearest invalid VERSION fail-closed
 
-## 3. Adversarial Pass
+- `plugins/codestable/skills/cs-onboard/tools/codestable_runtime.py:15-20` 使用严格 SemVer regex，拒绝数值前导零（如 `01.0.0`）和非法 prerelease（如 `1.0.0-01`）
+- `discover_plugin_version()` 对最近 standalone `VERSION` 存在但非法时直接返回 `None`，不回退读取父级 manifest：`codestable_runtime.py:74-86`
+- `tools/check-plugin-package.py:14-18` 使用相同严格 SemVer 正则
+- `tests/test_codestable_doctor.py:158-184` 覆盖 `unknown`、`1.0`、`version-1.0.0`、`1.0.0 trailing`、`1.0.0-01`、nearest ancestor invalid VERSION 不回退等场景
+- `tests/test_plugin_package.py:127-135` 覆盖 `01.0.0` 和 `1.0.0-01`
+- **结论：通过**
 
-- 假设的生产 bug：新增的 untracked target-only 豁免会误删用户 staged/modified 的受管资产，或让 dirty guard 漏放行。
-- 主动攻击过的反例：
-  - `check_cursor_distribution_contract`：空 `plugins`、非 dict 根、非字符串/空 `source`、绝对路径与 `..` 逃逸、source 目录缺失、plugin manifest 缺失/非法 JSON、单向与双向 identity mismatch、skills 值错误、skills 目录缺失 —— 每条都返回精确 `Finding` 并 fail-closed，`resolve()` + `relative_to(root)` 正确拒绝逃逸。
-  - `git_dirty_managed_paths`：staged 新增（`A `）、modified tracked（` M`）、source-backed 修改均不满足 `status == "??"`，全部落入 `dirty` 阻塞；只有 `??` 且属于 `runtime_target_only_paths` 的路径被豁免；`core.quotepath=false` 保证含空格/非 ASCII 路径解析稳定。
-  - `sync_runtime`：删除动作在 dirty guard 之后；guard 命中即 `managed-paths-dirty` 早返回，不触发任何 unlink。
-- 结果：反例均被现有实现或既有阻塞分支拦下；升级为 findings 的项为 none，残余转入 residual risk / QA focus。
+### 2.3 Reviewer gate 降级行为
 
-## 4. Findings
+- `cs-code-review/SKILL.md:150` 定义：subagent 与 model-safe bridge 均不可用时，用当前主模型最高思考档做 review，写 `reviewer: self`
+- `cs-code-review/references/independent-review/protocol.md:14` 确认 owner 授权 `ApproveLocalOnly` 后可降级为 owner-approved local review
+- `cs-onboard/references/agent-conventions.md` 的 `reviewGate` 保留 `LocalReview` 路径
+- `cs-feat`、`cs-epic`、`cs-goal` 的协议和状态机均同步
+- 禁止 Explore/Fast/unknown-model 冒充独立 reviewer
+- **结论：通过**
 
-### blocking
+### 2.4 Root compatibility boundary
 
-none
+- `tools/check-plugin-package.py:231-265` 对根目录 `cs-*` 路径区分三种情况：git-ignored 跳过、含 `SKILL.md` 的目录报错、仅 `tools/` 目录放行、其它内容报错
+- `tests/test_plugin_package.py:185-199` 覆盖 `bin`、`agents`、`.mcp.json` 负向场景与 `tools/` 正向场景
+- `tests/test_plugin_package.py:195-206` 覆盖根 `cs-*` 普通文件报错
+- **结论：通过**
 
-### important
+### 2.5 QA 证据充分性
 
-none
+- QA 报告覆盖：`tests` 720 passed, 1 skipped、package checker `ok`、runtime health `ok`、`git diff --check` 成功
+- QA 类型为 non-functional（分发契约、package checker、runtime 版本治理）
+- 非功能性 feature 不强制 e2e/browser/API；QA 报告已写明替代证据理由
+- **结论：通过**
 
-### nit
+### 2.6 Requirement delta 回写时机
 
-none
+- `cursor-plugin-v104-hardening-req-delta.md` 要求 acceptance 全部通过后才机械回写
+- `.codestable/requirements/plugin-market-distribution.md` 当前仅列 Codex、Claude、`skills` CLI；未包含 Cursor delta
+- **结论：通过**
 
-### suggestion
+## 3. Important
 
-- [ ] REV-S1 `check_cursor_distribution_contract` 仅校验 `plugins[0]`，与既有 Codex/Claude 检查同构；未来 marketplace 若允许多 entry，可考虑遍历所有 entry。当前不阻塞，属既有约定延续。
+- **I-1**: `approval-report.md` YAML 中 `code-review-local-only-round-1` 仍为 `pending`。这是历史 artifact，在 acceptance 前应同步更新，否则自动化流程可能假阻塞。
+- **I-2**: QA 声明 remediation 后需独立 subagent 复审。本 round 3 已完成独立复审并确认 passed，但需在 acceptance 报告中引用本轮 review evidence。
 
-### learning
+## 4. Nit
 
-- code review 的 local-only 授权必须独立于前三轮 design review 授权，且不自动传递到 acceptance。
-- 用 `git status --porcelain=v1 --untracked-files=all` 的两字符 status 区分 `??` 与 tracked 变更，是把「安全 stale cleanup」与「用户 managed modification」精确分流的关键。
+- `check_cursor_distribution_contract()` 仅验证 `plugins[0]`。当前单插件 marketplace 合同下可接受。
+- 主工作区存在 `__pycache__` 污染。QA 已声明并归因为 baseline。
 
-### praise
+## 5. Residual Risk
 
-- 实现提供 Git-aware isolated candidate、完整 tests（`617 passed / 1 skipped`）和真实无 `--force` runtime sync 证据。
-- runtime 豁免同时门控在 `??` 状态与 target-only 成员集合上，保留了 staged/modified/source-backed 的 fail-closed 边界。
+- 真实 Cursor Team Marketplace 导入、组织权限与 Auto Refresh 仍是外部集成风险，本地测试不能证明。
+- `plugins.0` 是 checker 的当前单 entry 合同；若未来支持多 plugin entry，需单独扩展。
 
-## 5. Test And QA Focus
+## 6. 验证证据
 
-- QA 必须重点复核：Cursor source 逃逸/缺失、identity mismatch、staged/modified target-only 不被删除、README 官方入口真实性。
-- Evidence pack residual risks / gate warnings：本轮为 Standard lane，无 evidence pack；reviewer 降级为 local-only 已获授权。
-- 建议新增或加强的测试：当前负向覆盖已足；无强制新增。
-- 不能靠 review 完全确认的点：Cursor Team Marketplace 的真实组织环境安装/刷新操作。
-
-## 6. Residual Risk
-
-- 本轮为 owner 授权的 local-only review，缺少独立 reviewer 上下文；acceptance 仍须按真实命令证据逐项核验 C1-C13。
-- README 的 Cursor 入口依赖官方 UI/文档事实，宿主 UI 变化后需重新核验（见 FDR-003）。
-
-## 7. Verdict
-
-- Status: passed
-- Next: 进入 `cs-feat` accept-inline，按 Inline Verification Matrix 逐项核验 C1-C13；requirement delta 与 canonical 回写在 acceptance 阶段机械应用。
-
-## 8. Focused Closure
-
-none
+| 项目 | 证据 | 结论 |
+|---|---|---|
+| 全量 tests | `720 passed, 1 skipped` | 通过 |
+| Package checker | `ok: true, findings: []` | 通过 |
+| Runtime sync | `status: ok, drifted_paths: []` | 通过 |
+| `git diff --check` | exit 0 | 通过 |
+| Source doctor | 当前 P1 = 10（均为历史遗留 evidence） | 非本 Feature blocker |

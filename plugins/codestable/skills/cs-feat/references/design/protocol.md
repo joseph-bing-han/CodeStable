@@ -27,8 +27,6 @@ advance input state
   | not (candidateChecklistValid state)     = Run BuildChecklist
   | designReview state == ChangesRequested  = Run DraftDesign
   | designReview state is ReviewAwaiting _  = Awaiting IndependentDesignReview
-  | designReview state is ReviewNeedsOwnerApproval reason
-                                             = HumanCheckpoint (ApproveReviewFallback reason)
   | designReview state is ReviewerFailed reason = Blocked reason
   | designReview state is ReviewBlocked reason  = Blocked reason
   | designReview state == ReviewMissing      = Run DesignReview
@@ -240,7 +238,7 @@ AI 默认翻车的姿势是**不思考就往眼前最顺手的文件里加**。
 
 - `passed`：普通单 feature 才能把 design + checklist + design-review 报告交给用户整体 review；`epic_child_batch: true` 时不要停用户，返回 `cs-epic` 继续下一个子 feature。
 - `changes-requested`：按 finding 修 design/checklist，重新校验 yaml 并重跑 `cs-feat` design-review 阶段。
-- `blocked`：补齐输入、等待独立 Task agent reviewer，或让用户明确降级 local-only 后重跑。
+- `blocked`：补齐输入或等待独立 Task agent reviewer 恢复可用后重跑；或由 owner 授权 `ApproveLocalOnly` 后用当前主模型最高档 local review。
 
 ### 6. 用户整体 review
 

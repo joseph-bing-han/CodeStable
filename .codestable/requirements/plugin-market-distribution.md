@@ -3,7 +3,7 @@ doc_type: requirement
 slug: plugin-market-distribution
 pitch: 让 CodeStable 像插件一样被安装和升级
 status: current
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-18
 implemented_by:
   - 2026-07-01-plugin-market-distribution
   - 2026-07-16-cursor-plugin-v104-hardening

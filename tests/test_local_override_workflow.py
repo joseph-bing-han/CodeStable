@@ -337,6 +337,42 @@ def test_complete_workflow_strips_date_prefix_for_refactor_units(tmp_path: Path)
     assert result["evidence"]["task"] == "skill-entry-cleanup"
 
 
+def test_archive_gate_rejects_cross_workflow_archive_binding(tmp_path: Path) -> None:
+    feature_dir = tmp_path / ".codestable/features/2026-07-17-safe-change"
+    feature_dir.mkdir(parents=True)
+
+    findings = workflow_next.archive_task_binding_findings(
+        complete_result(),
+        feature_dir,
+        {
+            "workflow": "issue",
+            "task_status": "archived",
+            "owner_skill": "cs-issue",
+        },
+    )
+
+    assert any("does not match" in finding for finding in findings)
+    assert any("not a final owner" in finding for finding in findings)
+
+
+def test_archive_gate_rejects_non_final_archive_owner(tmp_path: Path) -> None:
+    issue_dir = tmp_path / ".codestable/issues/2026-07-17-safe-change"
+    issue_dir.mkdir(parents=True)
+    issue_result = {**complete_result(), "workflow": "issue"}
+
+    findings = workflow_next.archive_task_binding_findings(
+        issue_result,
+        issue_dir,
+        {
+            "workflow": "issue",
+            "task_status": "archived",
+            "owner_skill": "cs-task",
+        },
+    )
+
+    assert findings == ["archived Task owner_skill 'cs-task' is not a final owner for issue"]
+
+
 def test_review_runtime_has_no_third_party_review_commands() -> None:
     reviewed_paths = [
         SKILLS / "cs-code-review/SKILL.md",
@@ -758,6 +794,101 @@ def test_doctor_accepts_legacy_reviewer_only_for_historical_archived_unit(
     )
 
     assert findings == []
+
+
+def test_doctor_accepts_legacy_issue_code_review_for_historical_archived_unit(
+    tmp_path: Path,
+) -> None:
+    """Pre-canonical Issue review filenames remain valid historical evidence."""
+    import codestable_common
+
+    issue_dir = tmp_path / ".codestable/issues/2026-07-16-historical-issue-review"
+    issue_dir.mkdir(parents=True)
+    write(issue_dir / "historical-issue-review-fix-note.md", "# Historical fix\n")
+    write(
+        issue_dir / "historical-issue-review-code-review.md",
+        "---\n"
+        "doc_type: issue-review\n"
+        "issue: 2026-07-16-historical-issue-review\n"
+        "status: passed\n"
+        "reviewer: subagent\n"
+        "---\n",
+    )
+    archived_task = runtime_task_document(
+        "historical-issue-review",
+        "completed",
+        workflow="issue",
+        created="2026-07-16",
+        updated="2026-07-16",
+    )
+    archived_task = archived_task.replace("status: completed", "status: archived", 1)
+    archived_task = archived_task.replace("archived: null", "archived: 2026-07-16", 1)
+    archived_task = archived_task.replace(
+        "## 2. 当前状态\n\ncompleted",
+        "## 2. 当前状态\n\narchived",
+        1,
+    )
+    write(
+        tmp_path / ".codestable/tasks/archived/2026-07-16-historical-issue-review.md",
+        archived_task,
+    )
+
+    findings = codestable_common.missing_review_findings(
+        tmp_path,
+        [Path(".codestable/issues/2026-07-16-historical-issue-review")],
+    )
+
+    assert findings == []
+
+
+def test_doctor_rejects_mismatched_legacy_issue_code_review_metadata(
+    tmp_path: Path,
+) -> None:
+    """Legacy filenames relax only the filename, never schema or identity."""
+    import codestable_common
+
+    issue_dir = tmp_path / ".codestable/issues/2026-07-16-historical-issue-review"
+    issue_dir.mkdir(parents=True)
+    write(issue_dir / "historical-issue-review-fix-note.md", "# Historical fix\n")
+    archived_task = runtime_task_document(
+        "historical-issue-review",
+        "completed",
+        workflow="issue",
+        created="2026-07-16",
+        updated="2026-07-16",
+    )
+    archived_task = archived_task.replace("status: completed", "status: archived", 1)
+    archived_task = archived_task.replace("archived: null", "archived: 2026-07-16", 1)
+    archived_task = archived_task.replace(
+        "## 2. 当前状态\n\ncompleted",
+        "## 2. 当前状态\n\narchived",
+        1,
+    )
+    write(
+        tmp_path / ".codestable/tasks/archived/2026-07-16-historical-issue-review.md",
+        archived_task,
+    )
+
+    for invalid_frontmatter in (
+        "doc_type: feature-review\nissue: 2026-07-16-historical-issue-review\nreviewer: subagent",
+        "doc_type: issue-review\nissue: 2026-07-16-other-issue\nreviewer: subagent",
+        "doc_type: issue-review\nissue: 2026-07-16-historical-issue-review\nreviewer: self",
+    ):
+        write(
+            issue_dir / "historical-issue-review-code-review.md",
+            "---\n"
+            f"{invalid_frontmatter}\n"
+            "status: passed\n"
+            "---\n",
+        )
+
+        findings = codestable_common.missing_review_findings(
+            tmp_path,
+            [Path(".codestable/issues/2026-07-16-historical-issue-review")],
+        )
+
+        assert len(findings) == 1
+        assert findings[0].severity == "P1"
 
 
 def test_doctor_rejects_legacy_reviewer_for_post_cutoff_archive(tmp_path: Path) -> None:

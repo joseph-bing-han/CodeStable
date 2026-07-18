@@ -4,12 +4,19 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
 
+SEMVER_IDENTIFIER_PATTERN = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
+SEMVER_PATTERN = re.compile(
+    r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+    rf"(?:-{SEMVER_IDENTIFIER_PATTERN}(?:\.{SEMVER_IDENTIFIER_PATTERN})*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 MANIFEST_PATH = ".codestable/runtime-manifest.json"
 MANAGED_PATHS = [
     ".codestable/gates",
@@ -68,12 +75,16 @@ def discover_plugin_version(source_skill_dir: Path | None) -> str | None:
     if source_skill_dir is None:
         return None
     current = source_skill_dir.resolve()
+    standalone_version_file = current / "VERSION"
+    if standalone_version_file.is_file():
+        standalone_version = standalone_version_file.read_text(encoding="utf-8").strip()
+        return standalone_version if SEMVER_PATTERN.fullmatch(standalone_version) else None
+
     for directory in [current, *current.parents]:
         version_file = directory / "VERSION"
         if version_file.is_file():
             version = version_file.read_text(encoding="utf-8").strip()
-            if version:
-                return version
+            return version if SEMVER_PATTERN.fullmatch(version) else None
         for rel in (".codex-plugin/plugin.json", ".claude-plugin/plugin.json"):
             plugin_json = directory / rel
             if plugin_json.is_file():
@@ -82,7 +93,7 @@ def discover_plugin_version(source_skill_dir: Path | None) -> str | None:
                 except json.JSONDecodeError:
                     continue
                 version = data.get("version") if isinstance(data, dict) else None
-                if isinstance(version, str) and version:
+                if isinstance(version, str) and SEMVER_PATTERN.fullmatch(version.strip()):
                     return version
     return None
 

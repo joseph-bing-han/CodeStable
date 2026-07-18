@@ -650,11 +650,13 @@ def test_review_outcomes_do_not_treat_waiting_or_missing_input_as_approval() -> 
         "Completed Findings",
         "Failed Reason",
         "Unavailable Reason",
-        "不 fallback 到 self review 或外部 APP",
+        "reviewer: self",
+        "不得伪写成 `subagent`",
     ):
         assert phrase in protocol
     assert "OcrLane" not in protocol
-    assert "`reviewer: self` 或无 reviewer 且无 owner approval：不放行" in protocol
+    assert "`reviewer: self` 或无 reviewer：不放行" not in protocol
+    assert "Explore/Fast/unknown-model" in protocol
 
 
 def test_issue_fast_path_confirmation_is_persisted_and_resumable() -> None:
@@ -1426,26 +1428,24 @@ def test_review_selector_preserves_guard_order_and_scope() -> None:
     review_gate_order = (
         "reviewGate _ (Finished findings)",
         "reviewGate _ (Active ref)",
-        "reviewGate _ (Failed _) (Just ApproveLocalOnly)",
         "reviewGate _ (Failed reason) _",
         "reviewGate (SelectionBlocked reason) NotStarted",
-        "reviewGate (SelectionNeedsOwnerApproval _) NotStarted (Just ApproveLocalOnly)",
         "reviewGate (SelectionNeedsOwnerApproval reason) NotStarted",
         "reviewGate (Start agent config) NotStarted",
     )
     review_gate_positions = [selector.index(fragment) for fragment in review_gate_order]
     assert review_gate_positions == sorted(review_gate_positions)
-    # owner-approved local review 降级路径：continued reviewer 不可用时默认 blocked，
-    # 只有 owner 显式 ApproveLocalOnly 才降级为本地 review。
-    assert "toReviewLane (NeedOwnerApproval reason) = Left reason" in selector
+    # reviewer 不可用时必须 fail closed，不能将 owner approval 视为独立 gate 通过。
+    assert "toReviewLane (Blocked reason) = Left reason" in selector
     assert "data ReviewVerdict = Passed | ChangesRequested | ReviewBlocked Reason" in selector
     assert_doc_contains(
         "cs-code-review",
         "references/independent-review/protocol.md",
         "reviewGate (selectTaskAgent Review env)",
         "hostAgentCapabilities",
-        "只有 owner 按 `approval-conventions.md` 显式授权 `ApproveLocalOnly`",
-        "新报告固定写 `reviewer: subagent`",
+        "当前主模型最高思考档",
+        "reviewer: self",
+        "不得用 self 冒充 subagent 过 gate",
     )
     independent_review = skill_text("cs-code-review", "references/independent-review/protocol.md")
     assert "OcrLane" not in independent_review

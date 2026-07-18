@@ -2,9 +2,9 @@
 doc_type: issue-review
 issue: 2026-07-11-task-archive-runtime-guard-regression
 status: passed
-reviewer: self
-reviewed: 2026-07-11
-round: 2
+reviewer: subagent
+reviewed: 2026-07-18
+round: 3
 ---
 
 # Task 归档后 active 文件重现回归代码审查报告
@@ -77,5 +77,5 @@ none
 ## 6. Verdict
 
 - Status: passed
-- Reviewer: self
+- Reviewer: historical Round 2 self review; Round 3 独立 subagent focused review 已核验 runtime 状态机、崩溃恢复、TOCTOU 防护与行为测试，无 blocking 或 important finding。
 - Next: 更新 Task 为 completed，并通过新 Task runtime 执行 `cs-task archive`。

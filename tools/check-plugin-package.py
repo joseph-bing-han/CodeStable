@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any
 
 
-VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+SEMVER_IDENTIFIER_RE = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
+VERSION_RE = re.compile(
+    r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+    rf"(?:-{SEMVER_IDENTIFIER_RE}(?:\.{SEMVER_IDENTIFIER_RE})*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 CODESTABLE_SKILL_RE = re.compile(r"^cs(?:-.+)?$")
 CURSOR_MARKETPLACE_PATH = ".cursor-plugin/marketplace.json"
 CURSOR_PLUGIN_SOURCE = "plugins/codestable"
@@ -66,7 +71,7 @@ def check_version(root: Path, findings: list[Finding]) -> str | None:
         return None
 
     version = version_path.read_text(encoding="utf-8").strip()
-    if not VERSION_RE.match(version):
+    if not VERSION_RE.fullmatch(version):
         findings.append(Finding("VERSION", f"VERSION is not semver: {version!r}"))
     return version
 
@@ -240,8 +245,32 @@ def check_skill_layout(root: Path, findings: list[Finding]) -> None:
             findings.append(Finding(rel(path, root), "skill is missing SKILL.md"))
 
     for path in sorted(root.iterdir()):
-        if CODESTABLE_SKILL_RE.match(path.name) and (path.is_dir() or path.is_symlink()):
+        if is_git_ignored(root, path):
+            continue
+        if CODESTABLE_SKILL_RE.match(path.name) and (
+            path.is_symlink() or (path.is_dir() and (path / "SKILL.md").is_file())
+        ):
             findings.append(Finding(path.name, "root cs* skill entry must be moved under plugins/codestable/skills"))
+        elif CODESTABLE_SKILL_RE.match(path.name) and path.is_dir():
+            invalid_entries = [
+                entry
+                for entry in sorted(path.iterdir())
+                if entry.name != "tools" or not entry.is_dir() or entry.is_symlink()
+            ]
+            for invalid_entry in invalid_entries:
+                findings.append(
+                    Finding(
+                        rel(invalid_entry, root),
+                        "root compatibility directory may contain only tools/**",
+                    )
+                )
+        elif CODESTABLE_SKILL_RE.match(path.name):
+            findings.append(
+                Finding(
+                    path.name,
+                    "root compatibility path must be a tools-only directory",
+                )
+            )
         elif path.is_dir() and (path / "SKILL.md").is_file():
             findings.append(Finding(path.name, "root standalone skill entry must be removed from this distribution branch"))
 

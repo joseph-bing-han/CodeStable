@@ -306,6 +306,13 @@ def review_file_for(unit_dir: Path) -> Path:
     return unit_dir / f"{unit_slug(unit_dir)}-review.md"
 
 
+def legacy_issue_review_file_for(unit_dir: Path) -> Path | None:
+    """Return the pre-canonical Issue review filename, when applicable."""
+    if unit_dir.parts[1] != "issues":
+        return None
+    return unit_dir / f"{unit_slug(unit_dir)}-code-review.md"
+
+
 def all_checklist_steps_done(path: Path) -> bool:
     if not path.exists():
         return False
@@ -559,12 +566,18 @@ def review_evidence_matches_repository(path: Path) -> bool:
     )
 
 
-def review_has_subagent_evidence(path: Path) -> bool:
+def review_has_subagent_evidence(path: Path, *, allow_legacy_issue_filename: bool = False) -> bool:
     schema = review_unit_schema(path)
     if schema is None:
         return False
     expected_doc_type, identity_field, expected_identity, expected_filename = schema
-    if path.name != expected_filename:
+    legacy_issue_filename = (
+        f"{unit_slug(path.parent)}-code-review.md" if path.parent.parent.name == "issues" else None
+    )
+    acceptable_filenames = {expected_filename}
+    if allow_legacy_issue_filename and legacy_issue_filename is not None:
+        acceptable_filenames.add(legacy_issue_filename)
+    if path.name not in acceptable_filenames:
         return False
     fields = review_frontmatter_data(path)
     return bool(
@@ -658,6 +671,23 @@ def missing_review_findings(root: Path, units: list[Path]) -> list[Finding]:
             continue
         review_path = review_file_for(unit_dir)
         full_review_path = root / review_path
+        legacy_issue_review_path = legacy_issue_review_file_for(unit_dir)
+        full_legacy_issue_review_path = (
+            root / legacy_issue_review_path if legacy_issue_review_path is not None else None
+        )
+        if review_has_canonical_evidence(full_review_path):
+            continue
+        if unit_has_archived_task(root, unit_dir) and (
+            review_has_subagent_evidence(full_review_path)
+            or (
+                full_legacy_issue_review_path is not None
+                and review_has_subagent_evidence(
+                    full_legacy_issue_review_path,
+                    allow_legacy_issue_filename=True,
+                )
+            )
+        ):
+            continue
         if not full_review_path.exists():
             findings.append(
                 Finding(
@@ -666,12 +696,6 @@ def missing_review_findings(root: Path, units: list[Path]) -> list[Finding]:
                     path=review_path.as_posix(),
                 )
             )
-        elif review_has_canonical_evidence(full_review_path):
-            continue
-        elif unit_has_archived_task(root, unit_dir) and review_has_subagent_evidence(
-            full_review_path
-        ):
-            continue
         else:
             findings.append(
                 Finding(

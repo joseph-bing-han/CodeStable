@@ -1,54 +1,37 @@
 ---
-doc_type: code-review
-scope_type: issue
+doc_type: issue-review
 issue: 2026-06-29-mandatory-task-review-spine-regression
-status: approved
-reviewer: self
-related:
-  - mandatory-task-review-spine-regression-report.md
-  - mandatory-task-review-spine-regression-analysis.md
-  - mandatory-task-review-spine-regression-fix-note.md
-tags: [workflow, task, code-review, handoff]
+status: passed
+reviewer: subagent
+reviewed: 2026-07-18
+round: 2
+review_basis: independent-readonly-historical-remediation
 ---
 
-# 完整入口缺失 Task 与 Code Review 主线 Code Review
+# mandatory-task-review-spine-regression 独立审查（Round 2）
 
-## 1. Review 范围
+## Verdict
 
-审查范围覆盖本次 workflow 文档改动、共享协议、issue 阶段出口、`cs-task` 恢复模式和 `cs-code-review` 横切 gate。
+**passed**
 
-## 2. 审查结论
-
-通过。没有 blocking 或 important finding。
-
-## 3. Findings
+## Findings
 
 ### blocking
-
-none
+无。
 
 ### important
-
-none
+无。
 
 ### nit
+无。
 
-none
+## 核验摘要
 
-### suggestion
+- `codestable-workflow-next.py` 定义 `enforce_task_archive_gate` 与 `archive_task_binding_findings`。
+- feature/issue/refactor CLI 路径在 `complete` 时调用 archive gate。
+- 回归覆盖缺 Task→backfill、completed active→archive、hash 篡改阻塞、workflow/owner binding。
+- `cs-task` 协议要求 archived 正本存在且 active 同名不存在才闭环。
 
-- `cs-feat-impl/SKILL.md` 已超过 300 行，本轮没有修改它；后续单独拆分该文件时，可把实现汇报模板和长段落迁到 reference 文件。
+## Residual Risk
 
-### residual-risk
-
-- 本轮是 Markdown workflow contract 修复，自动化测试不能直接模拟 Cursor / Codex runtime 在真实对话中的每个分支；已通过动作级硬约束、关键技能覆盖、grep 与测试降低风险。
-
-## 4. 验证证据
-
-- `uvx pytest -q`：通过，`52 passed in 13.95s`。
-- `git diff --name-only | xargs wc -l`：本次 tracked 修改文件均不超过 300 行。
-- `rg`：关键 spine 约束在 shared conventions、system overview、issue、task、code-review 中均命中。
-
-## 5. 通过后去向
-
-本 issue 可进入 Task complete 与 archive。
+- issue workflow 决策器主要依赖 skill 协议 + archive gate；端到端宿主 smoke 未在本轮重跑。

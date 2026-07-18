@@ -34,7 +34,7 @@
 data PlanningMode = New | Update
 data Phase = LockTarget | LoadFacts | Draft | SelfCheck | IndependentReview | UserReview | Persist
 data PlanningCheckpoint
-  = SelectOneRoadmap | ReviewRoadmapDraft | ApprovePlanningReviewFallback Reason
+  = SelectOneRoadmap | ReviewRoadmapDraft
 data PlanningState = PlanningState { pendingCheckpoint : Maybe PlanningCheckpoint }
 data PlanningResume
   = RoadmapSelected Slug PlanningMode

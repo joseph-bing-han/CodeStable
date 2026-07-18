@@ -11,15 +11,21 @@ reviewDecision :: AgentEnv -> AgentRun -> Maybe OwnerApproval -> AgentDecision
 reviewDecision env run approval = reviewGate (selectTaskAgent Review env) run approval
 ```
 
-`selectTaskAgent Review` 必须先按 attention 的显式配置匹配 `hostAgentCapabilities`，再按共享 `reviewGate` 处理 launch/await/completed/failed。显式 pin 的配置不可用时 `SelectionBlocked ExplicitConfigUnavailable`，owner 需先改配置；继承配置下独立 reviewer 不可用时返回 `NeedOwnerApproval`，默认 blocked，只有 owner 按 `approval-conventions.md` 显式授权 `ApproveLocalOnly` 才降级为 owner-approved local review。批量、赶时间、已自查、自评低风险或 owner 口头同意都不构成 `ApproveLocalOnly`。
+`selectTaskAgent Review` 必须先按 attention 的显式配置匹配 `hostAgentCapabilities`，再按共享 `reviewGate` 处理 launch/await/completed/failed。显式 pin 的配置不可用时 `SelectionBlocked ExplicitConfigUnavailable`，owner 需先改配置。继承配置下独立 reviewer 的单一路径：
+
+1. 可启动 `codestable-code-reviewer` 且模型/思考档符合当前主模型最高档契约 → 独立 review，写 `reviewer: subagent`。agent 定义中的 `model:` 可作为 Cursor 宿主兜底（例如 `gpt-5.6-sol`），不改变「优先当前主模型最高档」的派发意图。
+2. 否则仅当 model-safe bridge 可请求当前主模型最高档、或明确保证父模型继承 → readonly bridge，写 `reviewer: subagent`。
+3. 否则用**当前主模型最高思考档**做 review，写 `reviewer: self`（不得伪写成 `subagent`）。
+
+禁止 Explore/Fast/unknown-model 伪独立。活跃 Task 的 `workflow-next` complete 仍要求 full canonical `reviewer: subagent` 生命周期证据；`reviewer: self` 是合法 review 结论，但 live complete 需重新取得独立 subagent 证据或 owner 显式处理，不得用 self 冒充 subagent 过 gate。
 
 ### Reviewer 派发合约（模型档位）
 
 启动 reviewer 前必须按 `.codestable/reference/tools.md` 的 Subagent Runtime Mapping 与本 skill 的 `code-reviewer.md` 派发模板执行，核心约束：
 
 - reviewer 运行在**当前对话主模型的最高思考等级**（Opus 4.8 → `max`，`gpt-5.6-sol` → `xhigh`）；`.codestable/attention.md` 显式 pin 了 provider/model 时以 attention 为准。
-- 派发顺序：优先 Cursor 自定义 subagent `codestable-code-reviewer`；不可用时，仅在 runtime 能请求当前主模型最高档、或明确保证未指定模型的通用 subagent 继承当前主模型时，才用 `readonly generalPurpose` bridge（合并 `plugins/codestable/agents/code-reviewer.md` role prompt 与填好的 task body）；两个 model-safe 条件都不满足时，用当前主模型 self review。
-- **禁止**用 `Explore` / `explorer`、Fast 模型预设、`model: fast` 或 unknown-model bridge 冒充 reviewer；这类预设会把 review 降级到低思考档异构模型，属于 fail-closed 违规。
+- 派发顺序：见上文 1→2→3。
+- **禁止**用 `Explore` / `explorer`、Fast 模型预设、`model: fast` 或 unknown-model bridge 冒充 reviewer。
 
 ```haskell
 data ReviewerState
@@ -39,9 +45,8 @@ data ReviewDecision
 - `ReadyToLaunch`：按 `.codestable/reference/agent-conventions.md` 选择 code-review Task agent。
 - `Active`：宿主启动成功后立即把真实 `AgentRef` 持久化到 review 报告。
 - `Completed`：主 agent 对 findings 做仓库事实核验、去重和严重度归一。
-- `Failed` / `Unavailable`：写 `status: blocked`；不 fallback 到 self review 或外部 APP。
+- `Failed` / `Unavailable`（且 bridge 也不 model-safe）：用当前主模型最高档 review，写 `reviewer: self` 与原因；**禁止**写 `reviewer: subagent`。Explore/Fast 失败不得当作通过。
 - 恢复时 round/ref 必须精确匹配；缺失或不匹配时 fail closed，禁止重复启动。
-
 ## 2. Reviewer 输入隔离
 
 独立 reviewer 只接收原始材料：
@@ -87,7 +92,7 @@ data ReviewDecision
 2. 合并重复 finding；
 3. 不可证实的外部结论降为 residual-risk 或丢弃；
 4. 生成 `{slug}-review.md`；
-5. 新报告固定写 `reviewer: subagent`；
+5. 独立 Task agent / model-safe bridge 写 `reviewer: subagent`；主模型最高档兜底写 `reviewer: self`，**禁止**把 self 标成 subagent；
 6. 结果已消费且没有 pending permission 后，按 `.codestable/reference/agent-conventions.md` 的 Task agent 生命周期关闭该 reviewer。
 
 遇到 agent capacity/thread limit 时，不预先清理运行中的 agent；只在失败后按最老已完成 agent 清理并重试一次，仍失败则 blocked。
@@ -103,8 +108,7 @@ data ReviewDecision
 
 ## 6. Gate 结论
 
-- `reviewer: subagent` + `status: passed`：默认放行。
-- reviewer pending/failed/unavailable：默认 blocked。
-- 继承配置下独立 reviewer 不可用，且 owner 按 `approval-conventions.md` 显式授权 `ApproveLocalOnly` 时，降级为 owner-approved local review（主 agent 本地审查），记录 owner approval 证据；显式 pin 的配置不可用不适用此降级，owner 需先改配置。
-- `reviewer: self` 或无 reviewer 且无 owner approval：不放行。
-- 不提供环境变量绕过独立 reviewer 的默认路径。
+- `reviewer: subagent` + `status: passed` + full canonical lifecycle（含 ref/provider/model/reasoning/readonly/hash）：活跃 Task 的 `workflow-next` complete 放行条件。
+- `reviewer: self` + `status: passed`：当前主模型最高档兜底，合法 review 结论；**不**满足 live complete 的 canonical subagent gate，不得伪写 subagent。
+- Explore/Fast/unknown-model 冒充、无 reviewer 字段、或把 self 标成 subagent：不放行。
+- 不提供环境变量绕过模型档位或伪造 `reviewer: subagent` 的默认路径。

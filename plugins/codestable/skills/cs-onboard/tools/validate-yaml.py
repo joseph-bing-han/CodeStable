@@ -12,7 +12,7 @@ no required external dependencies (falls back to builtin parser if PyYAML unavai
 
 Usage examples:
   # Validate all .md files under codestable/features
-  python <cs-onboard skill dir>/tools/validate-yaml.py --dir .codestable/features
+  python <cs-onboard skill dir>/tools/validate-yaml.py --root /path/to/repo --dir .codestable/features
 
   # Validate a single file
   python <cs-onboard skill dir>/tools/validate-yaml.py --file .codestable/features/2026-04-11-auth/auth-design.md
@@ -257,6 +257,11 @@ def _build_parser() -> argparse.ArgumentParser:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--dir", type=str, help="Directory to scan recursively for .md files")
     source.add_argument("--file", type=str, help="Single file to validate")
+    parser.add_argument(
+        "--root",
+        type=Path,
+        help="Repository root used to resolve relative --file and --dir paths",
+    )
     parser.add_argument("--require", action="append", default=[], metavar="FIELD",
                         help="Require this field in frontmatter (repeatable)")
     parser.add_argument("--json", action="store_true", dest="json_output",
@@ -267,8 +272,20 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _validate_single(path_str: str, require: list[str], yaml_only: bool) -> list[ValidationResult]:
-    fp = Path(path_str)
+def _resolve_input_path(path_str: str, root: Path | None) -> Path:
+    candidate = Path(path_str)
+    if candidate.is_absolute() or root is None:
+        return candidate
+    return root / candidate
+
+
+def _validate_single(
+    path_str: str,
+    require: list[str],
+    yaml_only: bool,
+    root: Path | None,
+) -> list[ValidationResult]:
+    fp = _resolve_input_path(path_str, root)
     if not fp.exists():
         print(f"Error: File not found: {fp}", file=sys.stderr)
         sys.exit(2)
@@ -277,8 +294,13 @@ def _validate_single(path_str: str, require: list[str], yaml_only: bool) -> list
     return [validate_markdown_file(fp, require)]
 
 
-def _validate_directory(dir_str: str, require: list[str], yaml_only: bool) -> list[ValidationResult]:
-    dp = Path(dir_str)
+def _validate_directory(
+    dir_str: str,
+    require: list[str],
+    yaml_only: bool,
+    root: Path | None,
+) -> list[ValidationResult]:
+    dp = _resolve_input_path(dir_str, root)
     if not dp.is_dir():
         print(f"Error: Directory not found: {dp}", file=sys.stderr)
         sys.exit(2)
@@ -299,11 +321,16 @@ def _validate_directory(dir_str: str, require: list[str], yaml_only: bool) -> li
 
 def main() -> None:
     args = _build_parser().parse_args()
+    root = args.root.resolve() if args.root is not None else None
+
+    if root is not None and not root.is_dir():
+        print(f"Error: Repository root not found: {root}", file=sys.stderr)
+        sys.exit(2)
 
     if args.file:
-        results = _validate_single(args.file, args.require, args.yaml_only)
+        results = _validate_single(args.file, args.require, args.yaml_only, root)
     else:
-        results = _validate_directory(args.dir, args.require, args.yaml_only)
+        results = _validate_directory(args.dir, args.require, args.yaml_only, root)
 
     if args.json_output:
         print_json_results(results)

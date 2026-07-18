@@ -6,6 +6,7 @@ Acceptance 是最终仓库审计，不是实现汇报整理：复核 design/chec
 
 ```haskell
 data AcceptanceInput = StartAcceptance | ResumeAcceptance AcceptanceDecision | ResumeGoalAcceptance ApprovalRef | ResumeAcceptanceAuditor OwnerApproval
+data AcceptanceRisk = AcceptanceRisk { changesSecurityBoundary : Bool, changesAuthorization : Bool, changesPersistentData : Bool, changesExternalIntegration : Bool, changesReleaseOrDistributionContract : Bool, changesRuntimeOrReviewerGovernance : Bool }
 data WaitReason = AcceptanceAuditor AgentRef
 data VerificationSource = PassedQA | InlineVerification | MissingVerification
 data AcceptanceOutcome
@@ -13,10 +14,11 @@ data AcceptanceOutcome
   | PendingHandoff Skill Context | RepairGap Gap | Handoff Reason
   | AuditLocally | LaunchAuditor AgentCapability AgentConfig | MergeAudit Findings
   | Awaiting WaitReason | HumanCheckpoint Reason | NeedsHuman Reason | Blocked Reason | Complete
-
-selectAcceptanceAuditor :: AcceptanceInput -> Bool -> AgentEnv -> AgentRun -> AcceptanceOutcome
-selectAcceptanceAuditor input required env run =
-  acceptanceAuditorGate required (selectTaskAgent Acceptance env) run (case input of ResumeAcceptanceAuditor approval -> Just approval; _ -> Nothing)
+selectAcceptanceAuditor :: AcceptanceInput -> AcceptanceRisk -> AgentEnv -> AgentRun -> AcceptanceOutcome
+selectAcceptanceAuditor input risk env run =
+  acceptanceAuditorGate (acceptanceAuditorRequired risk) (selectTaskAgent Acceptance env) run (case input of ResumeAcceptanceAuditor approval -> Just approval; _ -> Nothing)
+acceptanceAuditorRequired :: AcceptanceRisk -> Bool
+acceptanceAuditorRequired risk = changesSecurityBoundary risk || changesAuthorization risk || changesPersistentData risk || changesExternalIntegration risk || changesReleaseOrDistributionContract risk || changesRuntimeOrReviewerGovernance risk
 
 acceptanceAuditorGate :: Bool -> AgentSelection -> AgentRun -> Maybe OwnerApproval -> AcceptanceOutcome
 acceptanceAuditorGate _ _ (Finished findings) _ = MergeAudit findings
@@ -24,11 +26,9 @@ acceptanceAuditorGate _ _ (Active ref) _ = Awaiting (AcceptanceAuditor ref)
 acceptanceAuditorGate _ _ (Failed reason) _ = Blocked reason
 acceptanceAuditorGate False _ NotStarted _ = AuditLocally
 acceptanceAuditorGate True (SelectionBlocked reason) NotStarted _ = Blocked reason
-acceptanceAuditorGate True (SelectionNeedsOwnerApproval _) NotStarted (Just ApproveLocalOnly) = AuditLocally
-acceptanceAuditorGate True (SelectionNeedsOwnerApproval reason) NotStarted _ = HumanCheckpoint reason
+acceptanceAuditorGate True (SelectionNeedsOwnerApproval reason) NotStarted _ = Blocked reason
 acceptanceAuditorGate True (Start agent config) NotStarted _ = LaunchAuditor agent config
 acceptanceAuditorGate _ _ _ _ = Blocked InvalidAuditorTransition
-
 requestedAcceptanceFix :: AcceptanceInput -> Maybe FixKind
 requestedAcceptanceFix (ResumeAcceptance (RequestAcceptanceChanges fix)) = Just fix
 requestedAcceptanceFix _ = Nothing
@@ -60,7 +60,7 @@ accept input s
 ```
 
 `Complete` 前必须存在 acceptance report；Goal 只能用与 goal-state 匹配的 `ResumeGoalAcceptance ApprovalRef` 放行，缺失或不匹配直接 handoff，不能把 driver 运行等同 owner 批准；领域术语/ADR 只登记并建议 `cs-domain`，当前阶段不代写。
-**独立审计边界**：需要 auditor 时按上述 gate 处理：`ResumeAcceptanceAuditor` 必须由主入口 typed union 传入；`LaunchAuditor` 先写报告的 `audit_state: awaiting` 与 `auditor_id`，`Awaiting (AcceptanceAuditor ref)` 只从该 id 恢复；owner approval、auditor failure、hard block 分别持久化为 `needs-owner-approval`、`auditor-failed`、`blocked` 并填写 `audit_reason`，不得静默降级。auditor 按 agent conventions 的 read-only 等价 mode 启动，只读 design/checklist/review/QA/final diff 和状态候选，只返回 findings，不写 acceptance/checklist/roadmap/requirement；auditor 输出被消费后按 Task agent 生命周期关闭，最终 verdict 和写入仍由当前 owner 完成。
+**独立审计边界**：`acceptanceAuditorRequired` 是唯一风险分类：安全、授权、持久化数据、外部集成、发布/分发契约、runtime 或 reviewer governance 变更必须独立 auditor，不可由 owner approval 降级。`ResumeAcceptanceAuditor` 必须由主入口 typed union 传入；`LaunchAuditor` 先写 `audit_state: awaiting` 与 `auditor_id`；required auditor 不可用/失败/hard block 时持久化为 `blocked`/`auditor-failed`/`blocked`。auditor 按 agent conventions 的 read-only 等价 mode 启动，只读 design/checklist/review/QA/final diff 和状态候选，只返回 findings，不写 acceptance/checklist/roadmap/requirement；auditor 输出被消费后按 Task agent 生命周期关闭，最终 verdict 和写入仍由当前 owner 完成。
 
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md` 第 0 节。本阶段默认 **L3**，遵守 Global Route Governance：不自由重写长期 requirement；缺 owner-approved req delta 时先写 `approval-report.md`，再返回带目标和上下文的 `PendingHandoff "cs-req" ...`。详见同目录 `reference.md`。
 

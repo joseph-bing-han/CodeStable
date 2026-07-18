@@ -240,7 +240,7 @@ onCheckpoint (ApproveReviewFallback reason) = 停等 owner 决定是否批准 lo
   -- ConfirmScopeChange 仅用于 approved design 后改范围/公开契约；入口 fastforward 不合格直接 RoutedTo Design
 ```
 
-恢复输入必须显式进入 `FeatureRequest.resumeInput`；各 `Resume*` 原样交对应 stage protocol，`ResumeQARunner` / `ResumeAcceptanceAuditor` 只授权匹配的 pending runner/auditor fallback，`ApproveScopeChange` 回 design；`AuthorizeGoalAcceptance ref` 写同 unit 命名 approval 再由 goal protocol 持久化。仅拒绝 pending Goal acceptance authorization 时写 rejected 并 handoff；其他 `RejectCheckpoint` 保持原状态并返回 `Blocked OwnerRejectedCheckpoint`。任何确认都不靠聊天记忆猜测。
+恢复输入必须显式进入 `FeatureRequest.resumeInput`；各 `Resume*` 原样交对应 stage protocol，`ResumeQARunner` / `ResumeAcceptanceAuditor` 只恢复匹配的 pending runner/auditor，`ResumeReview ApproveLocalOnly` 触发 `cs-feat` design-review 阶段的 owner-approved local review，`ApproveScopeChange` 回 design；`AuthorizeGoalAcceptance ref` 写同 unit 命名 approval 再由 goal protocol 持久化。仅拒绝 pending Goal acceptance authorization 时写 rejected 并 handoff；其他 `RejectCheckpoint` 保持原状态并返回 `Blocked OwnerRejectedCheckpoint`。任何确认都不靠聊天记忆猜测。
 
 Goal lane 的 implementation / code review / QA / acceptance 阻塞由 goal driver 按协议循环修复。Standard 在当前 run 继续，review passed 后直接进入带 Inline Verification Matrix 的 acceptance；独立 QA 报告不是默认阶段。
 driver 不可见、派发失败或 driver 返回 handoff 时走 `GoalHandoff`，不是 `HumanCheckpoint` / `NeedsHuman` 的第二种写法。

@@ -2,8 +2,9 @@
 doc_type: issue-review
 issue: 2026-07-16-epic-goal-dispatch-authorization-regression
 status: passed
-reviewed: 2026-07-16
-round: 4
+reviewer: subagent
+reviewed: 2026-07-18
+round: 5
 lane_a_state: completed
 lane_a_ref: "10f5ba8d-f177-4187-a43b-f325cc1b5acc"
 lane_a_reason: "owner-authorized codex/gpt-5.6-sol fallback passed after full re-review and focused closures; VerifiedNoWrite"

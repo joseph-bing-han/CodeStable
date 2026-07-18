@@ -59,9 +59,7 @@ persistReview _ _              (Launch _ _) _        = StartReviewer
 persistReview _ (Active ref)   (Await awaitedRef) _
   | ref == awaitedRef                               = PersistReview (ReviewAwaiting ref)
   | otherwise                                       = PersistReview (ReviewBlocked InvalidAwaitState)
-persistReview _ _              (NeedOwnerApproval r) _ = PersistReview (ReviewNeedsOwnerApproval r)
 persistReview _ _              (MergeVerified _) fs  = PersistReview (verdictReviewState fs)
-persistReview _ _              LocalReview fs        = PersistReview (verdictReviewState fs)
 persistReview _ (Failed r)     (Blocked _) _          = PersistReview (ReviewerFailed r)
 persistReview _ _              (Blocked r) _          = PersistReview (ReviewBlocked r)
 persistReview _ _              (Await _) _             = PersistReview (ReviewBlocked InvalidAwaitState)
@@ -72,8 +70,7 @@ verdictReviewState findings | hasBlocking findings = ReviewChangesRequested
 ```
 
 `_round` 表示每轮规则相同。`Launch` 先启动 reviewer，取得可观察 id 后以 `Active` 重入再落盘；
-`Await ref` 只有与 `Active ref` identity 相同时才可写 waiting；owner approval、reviewer failure 与 hard block 必须写成不同 `review_state`。
-`LocalReview` 仅来自 `ApproveLocalOnly`；只有 `MergeVerified` / `LocalReview` 可进入本地核验。
+`Await ref` 只有与 `Active ref` identity 相同时才可写 waiting；reviewer failure 与 hard block 必须写成不同 `review_state`。只有 `MergeVerified` 可进入本地事实核验；owner 风险接受不能替代独立 reviewer。
 
 独立 Task agent reviewer prompt 必须只给原始材料和边界，不透露本地 review 结论：
 
@@ -110,12 +107,11 @@ verdictReviewState findings | hasBlocking findings = ReviewChangesRequested
 
 ### 2. 独立审查合并
 
-- 记录 `heterogeneous-agent` / `independent-agent` / `local-only` 与 agent id、状态。
-- 最终 verdict 必须等 `reviewGate` 返回 `MergeVerified` 或 `LocalReview`。
+- 记录 `heterogeneous-agent` / `independent-agent` 与 agent id、状态。
+- 最终 verdict 必须等 `reviewGate` 返回 `MergeVerified`。
 - reviewer 返回后逐条做本地事实核验；能用文档 / 代码 / items 证据支撑才合并。
 - reviewer 结果合并进 `{slug}-roadmap-review.md` 后，按 Task agent 生命周期关闭该 reviewer。
-- `Await ref` 把同一 ref 写入 `status: blocked, review_state: awaiting-reviewer`；`NeedOwnerApproval` 写
-  `review_state: needs-owner-approval`；运行失败与 hard block 分别写 `reviewer-failed` / `blocked`，不静默降级。
+- `Await ref` 把同一 ref 写入 `status: blocked, review_state: awaiting-reviewer`；运行失败与 hard block分别写 `reviewer-failed` / `blocked`，不静默降级。
 
 ### 3. 规划审查
 
@@ -193,12 +189,12 @@ round: 1
 
 ### Independent Review
 
-- Status: not-available|skipped-by-user|local-only|pending|completed|failed|blocked
-- Detection: heterogeneous-agent|independent-agent|local-only|skipped
+- Status: not-available|skipped-by-user|pending|completed|failed|blocked
+- Detection: heterogeneous-agent|independent-agent|skipped
 - Provider / agent: {resolved config / agent id / none}
 - Raw output: {摘要 / 路径 / none}
 - Merge policy: {已逐条核验 / 未启用原因 / pending 时不得定稿}
-- Gate effect: {none | blocks final verdict until completed / user-approved downgrade}
+- Gate effect: {none | blocks final verdict until completed}
 
 ## 2. Roadmap Summary
 
@@ -294,7 +290,7 @@ Summary: E={n}, C={n}, H={n}, H-only core checks={列表或 none}。
 ## 容易踩的坑
 
 - 把 roadmap review 做成语病检查，没审接口契约和依赖图。
-- 把批量 roadmap 或赶时间当成 local-only 降级理由。
+- 把批量 roadmap、赶时间或 owner 风险接受当成独立 reviewer 降级理由。
 - 启动独立 Task agent reviewer 后结果还没回来，就把本地 review 定稿为 passed。
 - 外部 reviewer 的结论没经本地事实核验就照抄。
 - review 报告没有落盘，导致用户 review 和后续 design 没有可追溯输入。

@@ -2,7 +2,7 @@
 doc_type: task-list
 task: reviewer-model-fallback-regression
 goal: Fix CodeStable review gates selecting low-reasoning Explore or fast subagents
-status: completed
+status: archived
 workflow: issue
 owner_skill: cs-code-review
 created: 2026-07-10

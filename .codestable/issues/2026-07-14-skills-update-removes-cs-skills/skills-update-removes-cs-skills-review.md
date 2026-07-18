@@ -1,10 +1,10 @@
 ---
 doc_type: issue-review
-issue: skills-update-removes-cs-skills
+issue: 2026-07-14-skills-update-removes-cs-skills
 status: passed
-reviewer: subagent+ocr
-reviewed: 2026-07-14
-round: 2
+reviewer: subagent
+reviewed: 2026-07-18
+round: 3
 ---
 
 # Skills Update 删除 CodeStable Skills 代码审查报告

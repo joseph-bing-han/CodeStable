@@ -66,8 +66,6 @@ applyGoalResume (Just (ResolveGoalStop reason decision)) s
   | s.ownerStop == PendingStop reason && validGoalDecision reason decision s = Right (persistGoalDecision decision s)
   | otherwise = Left InvalidGoalResume
 validGoalDecision :: CheckpointReason -> GoalOwnerDecision -> GoalState -> Bool
-validGoalDecision ReviewAgentUnavailable (ApproveLocalReviewFallback ref) s = inheritedReviewAgentUnavailable s && approvalArtifactApproved s ref "goal-local-review"
-validGoalDecision _ (ApproveLocalReviewFallback _) _ = False
 validGoalDecision _ _ _ = True
 data GoalOutcome
   = Iterating GoalState               -- 自主继续，已写 iteration 报告 + 刷新 state.yaml
@@ -114,8 +112,6 @@ selectNextAttempt(req, s)
                                                    -> HumanCheckpoint reason
   | s.status == Blocked && s.ownerStop is ResolvedStop (ResumeWith delta)
                                                    -> Iterating (resumeGoal s delta)
-  | s.status == Blocked && s.ownerStop is ResolvedStop (ApproveLocalReviewFallback ref)
-                                                   -> Iterating (resumeWithLocalReview s ref)
   | s.status == Blocked && s.ownerStop is ResolvedStop KeepBlocked
                                                    -> Blocked (summary s)
   | s.status == Blocked                           -> NeedsHuman "blocked goal lacks owner-stop state"
@@ -212,7 +208,7 @@ unresolved assumptions 和 next action。保持简洁，只在 goal 边界或状
 1. 从 `state.yaml` 选择最小有用的下一次尝试。
 2. 按既有 CodeStable 约束实现；spec-governance 和 commit 规则适用时同样遵守。
    涉及 review gate（`cs-code-review`）时，按 `.codestable/reference/agent-conventions.md`
-   通过附近**可见 Task agent** 启动独立 reviewer 审查本轮 diff，并复用共享 `selectTaskAgent Review` / `reviewGate`。显式 pin 的配置不可用时 owner-stop，不能降级；继承配置下 agent 不可用时先写 pending `goal-local-review` 命名决策，只有 `ApproveLocalReviewFallback ApprovalRef` 机械核验通过才可 local review。**不在 goal driver 主线程静默自审**。
+   通过附近**可见 Task agent** 启动独立 reviewer 审查本轮 diff，并复用共享 `selectTaskAgent Review` / `reviewGate`。显式 pin 或继承配置下 agent 不可用时，先 owner-stop；owner 按 `approval-conventions.md` 显式授权 `ApproveLocalOnly` 后可用当前主模型最高档 local review。**不在 goal driver 主线程静默自审**。
 3. 用 fresh 命令或证据验证。
 4. 修改 `state.yaml.current_iteration` 前，根据 `state.yaml.current_iteration` 和已有
    `iterations/{nnn}*.md` 文件推导下一个三位数 iteration 编号；不要覆盖旧报告。
@@ -261,7 +257,7 @@ fixture 输出复核，或其他和 owner 相关的证明。单测、lint 和 bu
 - `HumanCheckpoint`：driver 触发 strict owner-stop（见「严格 Owner Stop」枚举的
   `CheckpointReason`）。停前先写 `.codestable/goals/YYYY-MM-DD-{slug}/approval-report.md`，
   除非最新 iteration 报告已含完整决策上下文、选项、推荐、权衡、证据、后果和下一步。
-- `Blocked`：owner 已回答并选择保持 blocked，或明确不继续；记录后返回终态摘要，不重复同一 checkpoint。owner 选择 `ResumeWith` 时应用 `GoalDelta`；批准命名 local-review fallback 时持久化 `ApprovalRef`；两者都先把 `status` 改回 `active` 并清除 pending owner-stop，再继续 iteration。
+- `Blocked`：owner 已回答并选择保持 blocked，或明确不继续；记录后返回终态摘要，不重复同一 checkpoint。owner 选择 `ResumeWith` 时应用 `GoalDelta`；两者都先把 `status` 改回 `active` 并清除 pending owner-stop，再继续 iteration。ReviewAgentUnavailable 时可 owner-stop 后走 `ApproveLocalOnly` 恢复 local review。
 
 三种情况都要报告：当前 goal 目录、`state.yaml.status`、阻塞或 checkpoint 原因、需要的
 owner 决策或下一步动作、已写文件（起点报告 / 最新 iteration / approval-report），以及是否

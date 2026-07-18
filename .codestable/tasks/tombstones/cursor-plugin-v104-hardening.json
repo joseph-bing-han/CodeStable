@@ -1,0 +1,10 @@
+{
+  "archived_date": "2026-07-16",
+  "archived_path": ".codestable/tasks/archived/2026-07-16-cursor-plugin-v104-hardening.md",
+  "archived_sha256": "9126b597067fc331eb1ffb96a3043606bba488838683e14292caff33d5d5e85b",
+  "source_sha256": "bc03934089a4d4ffb805915ac39effa458800676ce9f7af574e34f5f08171f49",
+  "source_status": "completed",
+  "staging_path": ".codestable/tasks/staging/cursor-plugin-v104-hardening.md",
+  "state": "archived",
+  "task": "cursor-plugin-v104-hardening"
+}

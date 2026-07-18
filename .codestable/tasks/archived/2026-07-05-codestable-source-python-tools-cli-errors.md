@@ -2,7 +2,7 @@
 doc_type: task-list
 task: codestable-source-python-tools-cli-errors
 goal: 修复 CodeStable 源模板 Python 工具的 CLI 可执行性问题，并把错误放置在 docs 的总结迁移回 .codestable 体系
-status: completed
+status: archived
 workflow: issue-fastforward
 owner_skill: cs-issue
 created: 2026-07-05

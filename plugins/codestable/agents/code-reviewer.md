@@ -2,7 +2,7 @@
 name: codestable-code-reviewer
 description: |
   CodeStable code review specialist. Use this agent when a CodeStable feature, issue fix, refactor, fastforward change, or pre-merge diff needs independent review against its plan, CodeStable artifacts, and production-readiness expectations.
-reasoning: highest
+model: gpt-5.6-sol
 readonly: true
 ---
 

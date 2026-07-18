@@ -41,7 +41,7 @@ csEpic :: EpicInput -> EpicOutcome
 csEpic = workflow
 data EpicInput
   = Start EpicRequest | Resume RepoFacts | ResumePlanningInput PlanningResume
-  | ConfirmRoadmapInput | ConfirmAllChildDesignInput | ApproveLocalReviewInput
+  | ConfirmRoadmapInput | ConfirmAllChildDesignInput
   | AuthorizeGoalExecutionInput ConfirmationId ApprovalRef ApprovalRef | RejectGoalExecutionInput
 data EpicRequest = EpicRequest
   { requestedStage : Maybe EntryStage, userGoal : Maybe Text -- planning | review | goal-package
@@ -50,8 +50,7 @@ data EntryStage = PlanningEntry | ReviewEntry | GoalPackageEntry
 data Stage = Planning | Review | ChildDesignBatch | GoalPackage
 data RoadmapReviewState
   = ReviewMissing | ReviewPassed | ReviewChangesRequested
-  | ReviewAwaiting AgentRef | ReviewNeedsOwnerApproval Reason
-  | ReviewerFailed Reason | ReviewBlocked Reason
+  | ReviewAwaiting AgentRef | ReviewerFailed Reason | ReviewBlocked Reason
 data GoalExecutionAuthorization
   = GroupApproved ConfirmationId ApprovalRef ApprovalRef | StrictLegacy104 ApprovalRef ApprovalRef
 data EpicGoalRunState                     -- 从 canonical group + goal-state projection 恢复
@@ -75,24 +74,22 @@ data EpicOutcome
   | NeedsHuman Reason | Blocked Reason
 data WaitReason = RoadmapReviewerRunning AgentRef | GoalDriverRunning DriverInfo | WorkflowWait Text
 data CheckpointReason
-  = ConfirmRoadmap | ConfirmAllChildDesign | ConfirmGoalExecutionAuthorization Command | ApproveReviewFallback Reason
+  = ConfirmRoadmap | ConfirmAllChildDesign | ConfirmGoalExecutionAuthorization Command
 data CheckpointResume
   = PersistRoadmapConfirmed | PersistAllDesignsApproved | DelegatePlanningResume PlanningResume
   | PersistGoalExecutionAuthorization ConfirmationId ApprovalRef ApprovalRef | PersistGoalExecutionRejection
-  | RerunReview OwnerApproval | RejectResume Reason
+  | RejectResume Reason
 resumeCheckpoint :: EpicInput -> CheckpointResume
 resumeCheckpoint ConfirmRoadmapInput                = PersistRoadmapConfirmed
 resumeCheckpoint ConfirmAllChildDesignInput         = PersistAllDesignsApproved
 resumeCheckpoint (ResumePlanningInput resume)         = DelegatePlanningResume resume
 resumeCheckpoint (AuthorizeGoalExecutionInput confirmationId acceptanceRef commitRef) = PersistGoalExecutionAuthorization confirmationId acceptanceRef commitRef
 resumeCheckpoint RejectGoalExecutionInput            = PersistGoalExecutionRejection
-resumeCheckpoint ApproveLocalReviewInput             = RerunReview ApproveLocalOnly
 resumeCheckpoint _                                  = RejectResume InvalidCheckpointResume
 resumeMatches :: EpicInput -> CheckpointReason -> Bool
 resumeMatches ConfirmRoadmapInput ConfirmRoadmap = True
 resumeMatches ConfirmAllChildDesignInput ConfirmAllChildDesign = True
 resumeMatches input (ConfirmGoalExecutionAuthorization _) = input is AuthorizeGoalExecutionInput _ _ _ || input == RejectGoalExecutionInput
-resumeMatches ApproveLocalReviewInput (ApproveReviewFallback _) = True
 resumeMatches _ _ = False
 applyCheckpointResume :: EpicInput -> EpicState -> Either Reason EpicState
 applyCheckpointResume (Start _) s = Right s
@@ -122,7 +119,6 @@ restoreEpicStage(s, request)
   | s.roadmapStatus == Missing                              -> RoutedTo Planning      -- 大需求未拆解
   | s.roadmapReviewState == ReviewChangesRequested          -> RoutedTo Planning
   | s.roadmapReviewState is ReviewAwaiting agent            -> Awaiting (RoadmapReviewerRunning agent)
-  | s.roadmapReviewState is ReviewNeedsOwnerApproval reason -> HumanCheckpoint (ApproveReviewFallback reason)
   | s.roadmapReviewState is ReviewerFailed reason           -> Blocked reason
   | s.roadmapReviewState is ReviewBlocked reason            -> Blocked reason
   | s.roadmapStatus == Draft && s.roadmapReviewState == ReviewMissing -> RoutedTo Review
@@ -248,7 +244,6 @@ onCheckpoint :: CheckpointReason -> Action
 onCheckpoint ConfirmRoadmap        = 停等用户确认 epic 规划            -- roadmap/epic planning review passed 后
 onCheckpoint ConfirmAllChildDesign = 停等用户统一确认所有 design，确认后逐份标 approved
 onCheckpoint (ConfirmGoalExecutionAuthorization command) = 展示 command 及 acceptance/scoped-commit 范围；写两项 pending decision，停等 owner 一次确认
-onCheckpoint (ApproveReviewFallback reason) = 停等 owner 决定是否批准 local-only review；记录 reason
 ```
 
 所有 `onCheckpoint` 都先把完整 reason 写入 canonical `approval-report.md` pending decision，再停等输入；无法恢复出同一 pending reason 时，任何 resume 都 fail-closed。Goal 启动确认批准时，生成一个 `ConfirmationId`，先原子写入 `approval_groups.goal-execution` 与两项 approved named decision，再幂等同步 goal-state 的相同 id、两份不同 ref 和 ready 状态；不得先写 goal-state，不得只批准一项，也不得再次询问。checkpoint 的 `Non-Automatic Actions` 必须明确：不会自动执行 remote push、merge、publish、release、deploy、promotion 或 production cutover，这些仍需各自授权。拒绝则把 goal execution 持久化为 handoff，且不得派发。

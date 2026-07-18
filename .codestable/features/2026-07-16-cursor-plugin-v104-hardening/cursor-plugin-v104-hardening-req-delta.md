@@ -2,8 +2,9 @@
 doc_type: requirement-delta
 requirement: plugin-market-distribution
 feature: 2026-07-16-cursor-plugin-v104-hardening
-status: approved
+status: applied
 created: 2026-07-16
+applied: 2026-07-18
 ---
 
 # plugin-market-distribution requirement delta

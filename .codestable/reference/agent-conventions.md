@@ -87,6 +87,8 @@ review 优先选择与主 agent provider 或 model family 不同的 `Heterogeneo
 
 每轮 review 都调用同一 `selectTaskAgent` / `reviewGate`。批量、赶时间、已自查或自评低风险
 都不构成 `ApproveLocalOnly`；降级前按 `approval-conventions.md` 取得 owner 明确授权。
+当独立 reviewer 与 model-safe bridge 都不可用时，可用当前主模型最高思考档做 local review，
+并写 `reviewer: self`；不得用 Explore / Fast / unknown-model 冒充。
 `Launch` 成功后必须先持久化宿主返回的 `AgentRef` 为 `Active ref`；只有该状态可恢复为
 `Await ref`。缺 id 的旧 blocked/pending 状态不能证明已有运行，不得据此等待、消费结果或重复启动。
 

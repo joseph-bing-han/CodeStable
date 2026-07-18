@@ -292,13 +292,13 @@ def test_feature_and_acceptance_decision_domains_are_closed() -> None:
     fastforward = skill("cs-feat/references/fastforward/protocol.md")
 
     assert "requestedMode  : Maybe ExecutionLane" in feature
-    for stage_resume in (
+    for phrase in (
         "ResumeDesign DesignDecision",
         "ResumeReview OwnerApproval",
         "ResumeAcceptance AcceptanceDecision",
         "ResumeEffect EffectDecision",
     ):
-        assert stage_resume in feature
+        assert phrase in feature
     for checkpoint in ("ConfirmAcceptance", "ConfirmEffect", "ApproveReviewFallback Reason"):
         assert checkpoint in feature
     assert "data WaitReason = DesignReviewerRunning AgentRef | AwaitGoalDriver DriverInfo" in feature
@@ -328,11 +328,15 @@ def test_feature_agent_gates_persist_recoverable_state() -> None:
         assert field in qa
     for field in ("audit_state:", "audit_reason:", "auditor_id:"):
         assert field in acceptance
-    assert "ReviewAwaiting AgentRef" in feature
-    assert "ReviewNeedsOwnerApproval Reason" in feature
-    assert "ReviewerFailed Reason" in feature
+    for phrase in (
+        "ReviewAwaiting AgentRef",
+        "ReviewNeedsOwnerApproval Reason",
+        "ReviewerFailed Reason",
+    ):
+        assert phrase in feature
     assert "旧 `blocked` 无 `review_state` 时 fail-closed" in feature
     assert "reviewGate (SelectionBlocked reason) NotStarted _ = Blocked reason" in agent_conventions
+    assert "reviewGate (SelectionNeedsOwnerApproval _) NotStarted (Just ApproveLocalOnly) = LocalReview" in agent_conventions
 
 
 def test_feature_and_epic_classify_stage_conflicts_as_needs_human() -> None:
@@ -377,9 +381,6 @@ def test_goal_completion_requires_linked_final_iteration_and_typed_owner_resume(
         "ResolveGoalStop CheckpointReason GoalOwnerDecision",
         "s.ownerStop == PendingStop reason",
         "Left InvalidGoalResume",
-        "ApproveLocalReviewFallback ApprovalRef",
-        'approvalArtifactApproved s ref "goal-local-review"',
-        "validGoalDecision _ (ApproveLocalReviewFallback _) _ = False",
         "completionEvidenceReady :: GoalState -> Bool",
         "s.acceptanceFinalIteration == s.finalIterationReport",
         "s.finalAcceptanceReport == s.acceptanceReport",
@@ -387,8 +388,9 @@ def test_goal_completion_requires_linked_final_iteration_and_typed_owner_resume(
         'NeedsHuman "complete goal lacks linked acceptance/final-iteration evidence"',
     ):
         assert phrase in goal
+    assert "ApproveLocalReviewFallback" in goal
     assert "s.status == Active && s.acceptancePassed      -> Completed" not in goal
-    assert "显式 pin 的配置不可用时 owner-stop，不能降级" in goal
+    assert "显式 pin 或继承配置下 agent 不可用时，先 owner-stop" in goal
     assert "不在 goal driver 主线程静默自审" in goal
     assert "AcceptanceAgentUnavailable -- 终端验收 Task agent 无法启动" in goal
     assert "含 `ReviewAgentUnavailable` / `AcceptanceAgentUnavailable`" in goal
@@ -554,9 +556,11 @@ def test_primary_workflow_checkpoint_resumes_are_typed_matched_and_consumed() ->
         assert phrase in feature
     assert "data QAInput = StartQA | ResumeQARunner OwnerApproval" in qa
     assert "selectQARunner :: QAInput -> QARequest" in qa
+    assert "qaRunnerRequired :: QARequest -> Bool" in qa
     assert "case input of ResumeQARunner approval -> Just approval" in qa
     assert "ResumeAcceptanceAuditor OwnerApproval" in acceptance
-    assert "selectAcceptanceAuditor :: AcceptanceInput -> Bool" in acceptance
+    assert "selectAcceptanceAuditor :: AcceptanceInput -> AcceptanceRisk" in acceptance
+    assert "acceptanceAuditorRequired :: AcceptanceRisk -> Bool" in acceptance
     assert "case input of ResumeAcceptanceAuditor approval -> Just approval" in acceptance
 
     issue_report = skill("cs-issue/references/report/protocol.md")

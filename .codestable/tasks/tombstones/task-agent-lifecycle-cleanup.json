@@ -1,0 +1,10 @@
+{
+  "archived_date": "2026-07-03",
+  "archived_path": ".codestable/tasks/archived/2026-07-03-task-agent-lifecycle-cleanup.md",
+  "archived_sha256": "9f58ebf17695d817bdfdc51627db1e5a94415afda4e78cf82f0660cc9dc6d4ca",
+  "source_sha256": "92ed33b5163024e5cf57ca998b105aa7579e05461e08d8e01ae6f6c6076b8dd3",
+  "source_status": "completed",
+  "staging_path": ".codestable/tasks/staging/task-agent-lifecycle-cleanup.md",
+  "state": "archived",
+  "task": "task-agent-lifecycle-cleanup"
+}
